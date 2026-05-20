@@ -197,6 +197,29 @@ Columns:
 - `n_null_sets`
 - `marker_coverage_fraction`
 
+Probability calibration details:
+
+- `ucell_score` is the observed local UCell-style score for one cell and one
+  state.
+- `state_probability` is a probability-like activity weight derived by comparing
+  the observed score to matched random gene-set null scores. It is not a
+  mutually exclusive posterior probability, and probabilities across states are
+  not expected to sum to one.
+- For each state, the runner samples `n_null_sets` random gene sets matched to
+  the observed marker set by gene-set size, expression bin, and detection-rate
+  bin. The random sets are scored with the same UCell-style statistic as the
+  real state.
+- The pooled random-set scores estimate the state-specific null density. The
+  observed scores for that state estimate the state-specific observed density.
+  The runner reports `probability_method = smoothed_histogram_lfdr` when the
+  smoothed density-ratio estimate succeeds and
+  `probability_method = empirical_null_cdf_fallback` when it falls back to the
+  empirical null CDF.
+- In the current Python continuous workflow, the matched-null probability
+  background is estimated from all cells scored for that state. There is not yet
+  a `--null-max-cells` cap for probability calibration, so very large maps may
+  need a lower `--null-n` until capped calibration is implemented.
+
 ### `cell_state_hard_assignments.tsv.gz`
 
 Columns:

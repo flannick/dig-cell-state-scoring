@@ -235,6 +235,32 @@ independent across states and do not sum to one. Interpret them as evidence that
 a state signature exceeds matched gene-set background, not as mutually exclusive
 cell-state posteriors.
 
+Calibration is state-specific. For each biological or QC state, the runner:
+
+1. identifies marker genes present in the expression matrix;
+2. bins genes by mean expression and detection rate;
+3. samples `--null-n` random gene sets with the same size as the observed state
+   marker set, preferentially matching each marker to genes from the same
+   expression/detection bin;
+4. scores each random gene set with the same UCell-style rank statistic;
+5. pools those random-set scores to estimate `f0_s`, the matched-gene-set null
+   background for state `s`;
+6. uses the observed state scores for state `s` to estimate `fobs_s`;
+7. converts each cell's observed score to `p_state_is` using the local-FDR
+   equation above and enforces monotonicity so higher UCell scores cannot receive
+   lower probability-like weights.
+
+The current Python continuous workflow estimates this probability background
+using all cells scored for that state. It does not yet expose a
+`--null-max-cells` cap for probability calibration. This can be expensive for
+large maps because the null work scales with approximately
+`n_states * --null-n * n_cells_in_state_calibration_group`. For very large runs,
+use a smaller `--null-n` until the capped calibration-subset implementation is
+added. The older Seurat/R thresholding workflow does expose `--null-max-cells`
+for null-threshold calibration; that option currently applies to
+`score_gmt_states_from_seurat.R`, not to probability calibration in
+`run_cmdkp_state_scoring.py`.
+
 Hard calls are optional thresholded derivatives:
 
 ```text
