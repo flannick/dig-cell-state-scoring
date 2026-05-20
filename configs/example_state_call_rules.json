@@ -1,0 +1,21 @@
+{
+  "states": [
+    {
+      "state": "pancreas_beta_cell_mature_beta_cell_identity",
+      "kind": "biological"
+    },
+    {
+      "state": "pancreas_beta_cell_er_stress_upr",
+      "kind": "biological",
+      "required_active": ["pancreas_beta_cell_mature_beta_cell_identity"]
+    },
+    {
+      "state": "qc_upr_er_stress",
+      "kind": "qc_flag"
+    },
+    {
+      "state": "qc_ambient_pancreas_islet_exocrine_high_expression",
+      "kind": "qc_flag"
+    }
+  ]
+}

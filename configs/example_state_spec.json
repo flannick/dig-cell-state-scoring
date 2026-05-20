@@ -1,0 +1,54 @@
+{
+  "cell_id_col": "cell_id",
+  "donor_col": "donor_id",
+  "states": [
+    {
+      "name": "mature_UCN3_MAFA_high",
+      "type": "module_quantile",
+      "genes": ["UCN3", "MAFA"],
+      "direction": "high",
+      "quantile": 0.75,
+      "within": "donor"
+    },
+    {
+      "name": "less_mature_UCN3_low",
+      "type": "module_quantile",
+      "genes": ["UCN3"],
+      "direction": "low",
+      "quantile": 0.25,
+      "within": "donor"
+    },
+    {
+      "name": "dediff_senescent_ALDH1A3_CD9_CDKN1A_high",
+      "type": "module_quantile",
+      "genes": ["ALDH1A3", "CD9", "CDKN1A"],
+      "direction": "high",
+      "quantile": 0.75,
+      "within": "donor"
+    },
+    {
+      "name": "canonical_INS_NKX6_1_high",
+      "type": "module_quantile",
+      "genes": ["INS", "NKX6-1"],
+      "direction": "high",
+      "quantile": 0.75,
+      "within": "donor"
+    },
+    {
+      "name": "er_stress_high",
+      "type": "module_quantile",
+      "genes": ["HSPA5", "DDIT3", "ATF4", "XBP1"],
+      "direction": "high",
+      "quantile": 0.75,
+      "within": "donor"
+    },
+    {
+      "name": "er_stress_low",
+      "type": "module_quantile",
+      "genes": ["HSPA5", "DDIT3", "ATF4", "XBP1"],
+      "direction": "low",
+      "quantile": 0.25,
+      "within": "donor"
+    }
+  ]
+}

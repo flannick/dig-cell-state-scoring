@@ -1,0 +1,26 @@
+{
+  "tarball": "data/external/pankbase/pankbase-scrna-umap-v3.3.tar.gz",
+  "tar_member": "pankbase-scrna-umap-v3.3/060425_scRNA_v3.3.rds",
+  "rds": "results/cell_state_de/pankbase_beta/tmp_rds/060425_scRNA_v3.3.rds",
+  "gmt": "../cell_states/out/pancreas/pancreas_cell_state_markers.gmt",
+  "state_regex": "^pancreas_beta_cell_",
+  "cell_id_col": "cell_id",
+  "donor_col": "center_donor_id",
+  "cell_type_col": "Cell_Type",
+  "group_col": "description_of_diabetes_status",
+  "treatment_col": "treatments",
+  "treatment_values": ["no_treatment"],
+  "case_values": ["type 2 diabetes"],
+  "control_values": ["non-diabetic"],
+  "state_assignment": {
+    "method": "quantile",
+    "quantile": 0.75,
+    "within": "cell_type"
+  },
+  "minimums": {
+    "min_cells": 20,
+    "min_donors": 3,
+    "min_count": 10,
+    "min_markers_found": 1
+  }
+}
