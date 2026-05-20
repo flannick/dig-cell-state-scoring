@@ -195,6 +195,8 @@ Columns:
 - `state_probability`
 - `probability_method`
 - `n_null_sets`
+- `n_null_calibration_cells`
+- `null_calibration_max_cells`
 - `marker_coverage_fraction`
 
 Probability calibration details:
@@ -215,10 +217,23 @@ Probability calibration details:
   smoothed density-ratio estimate succeeds and
   `probability_method = empirical_null_cdf_fallback` when it falls back to the
   empirical null CDF.
-- In the current Python continuous workflow, the matched-null probability
-  background is estimated from all cells scored for that state. There is not yet
-  a `--null-max-cells` cap for probability calibration, so very large maps may
-  need a lower `--null-n` until capped calibration is implemented.
+- The matched-null probability background is estimated from a deterministic
+  state-specific calibration subset of cells. `null_calibration_max_cells`
+  records the requested `--null-max-cells` cap, and
+  `n_null_calibration_cells` records how many cells were actually used. A cap of
+  `0` means use all cells scored for that state.
+
+Expression and DE summary interfaces:
+
+- `--query-genes` accepts a newline-delimited gene list and `--query-gene`
+  accepts comma-separated genes. These options restrict
+  `expression_expected_assignments.tsv.gz`,
+  `expression_hard_assignments.tsv.gz`, `de_expected_assignments.tsv.gz`, and
+  `de_hard_assignments.tsv.gz`.
+- Query-gene restriction does not change UCell scoring, probability calibration,
+  or hard state calls.
+- `--mode expected|hard|both` controls which expression and DE summary families
+  are computed. Unrequested summary outputs are written as header-only files.
 
 ### `cell_state_hard_assignments.tsv.gz`
 

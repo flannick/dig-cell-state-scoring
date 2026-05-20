@@ -309,6 +309,7 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
     bio_path = tmpdir / "bio.gmt"
     qc_path = tmpdir / "qc.gmt"
     state_thresholds_path = tmpdir / "state_thresholds.yaml"
+    query_genes_path = tmpdir / "query_genes.txt"
     out_dir = tmpdir / "runner_out"
     out_dir_excluded = tmpdir / "runner_out_excluded"
     metadata.to_csv(metadata_path, sep="\t", index=False)
@@ -317,6 +318,7 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
     bio_path.write_text(bio_gmt + "\n", encoding="utf-8")
     qc_path.write_text(qc_gmt + "\n", encoding="utf-8")
     state_thresholds_path.write_text("pancreas_beta_cell_state_a: 0.25\n", encoding="utf-8")
+    query_genes_path.write_text("G1\nG3\nMISSING_GENE\n", encoding="utf-8")
 
     run_cmd(
         [
@@ -338,6 +340,10 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
             str(out_dir),
             "--null-n",
             "5",
+            "--null-max-cells",
+            "3",
+            "--query-genes",
+            str(query_genes_path),
             "--min-calibration-cells",
             "2",
             "--min-markers-present",
@@ -380,6 +386,9 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
     assert scores["ucell_score"].notna().all()
     probabilities = pd.read_csv(out_dir / "cell_state_probabilities.tsv.gz", sep="\t")
     assert probabilities["state_probability"].between(0, 1).all()
+    assert {"n_null_calibration_cells", "null_calibration_max_cells"}.issubset(probabilities.columns)
+    assert probabilities["n_null_calibration_cells"].max() <= 3
+    assert (probabilities["null_calibration_max_cells"] == 3).all()
     assert (probabilities.groupby("cell_id")["state_probability"].sum() <= 1).any() or (probabilities.groupby("cell_id")["state_probability"].sum() > 1).any()
     hard_assignments = pd.read_csv(out_dir / "cell_state_hard_assignments.tsv.gz", sep="\t")
     assert {"hard_call", "threshold", "marker_coverage_pass"}.issubset(hard_assignments.columns)
@@ -389,7 +398,13 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
     qc_exclusions = pd.read_csv(out_dir / "qc_exclusions.tsv.gz", sep="\t")
     assert not qc_exclusions["excluded"].any()
     expected_expr = pd.read_csv(out_dir / "expression_expected_assignments.tsv.gz", sep="\t")
+    assert set(expected_expr["gene"]) == {"G1", "G3"}
     assert expected_expr["leave_one_gene_out_used"].any()
+    hard_expr = pd.read_csv(out_dir / "expression_hard_assignments.tsv.gz", sep="\t")
+    assert set(hard_expr["gene"]) == {"G1", "G3"}
+    run_summary = json.loads((out_dir / "run_summary.json").read_text(encoding="utf-8"))
+    assert run_summary["parameters"]["null_max_cells"] == 3
+    assert run_summary["parameters"]["n_query_genes"] == 2
     qc = pd.read_csv(out_dir / "bad_cell_qc_flags.tsv.gz", sep="\t")
     assert {"hard_exclusion_flag", "review_flag"}.issubset(qc.columns)
     calls = pd.read_csv(out_dir / "cell_state_calls.tsv.gz", sep="\t")

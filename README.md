@@ -176,6 +176,8 @@ integrated embeddings, PCA coordinates, or other latent spaces as scoring input.
   --cell-type-col cell_type \
   --donor-col donor_id \
   --sample-col sample_id \
+  --null-max-cells 20000 \
+  --query-genes results/cell_state_de/query_genes.txt \
   --mode both
 ```
 
@@ -250,16 +252,23 @@ Calibration is state-specific. For each biological or QC state, the runner:
    equation above and enforces monotonicity so higher UCell scores cannot receive
    lower probability-like weights.
 
-The current Python continuous workflow estimates this probability background
-using all cells scored for that state. It does not yet expose a
-`--null-max-cells` cap for probability calibration. This can be expensive for
-large maps because the null work scales with approximately
-`n_states * --null-n * n_cells_in_state_calibration_group`. For very large runs,
-use a smaller `--null-n` until the capped calibration-subset implementation is
-added. The older Seurat/R thresholding workflow does expose `--null-max-cells`
-for null-threshold calibration; that option currently applies to
-`score_gmt_states_from_seurat.R`, not to probability calibration in
-`run_cmdkp_state_scoring.py`.
+The Python continuous workflow estimates this probability background from a
+deterministic calibration subset of cells scored for that state. The maximum
+subset size is controlled by `--null-max-cells` and defaults to `20000`; use
+`--null-max-cells 0` to use all scored cells. This keeps the null work closer to
+`n_states * --null-n * min(n_cells_in_state_calibration_group, null_max_cells)`
+instead of forcing every random gene set to be scored over every cell in very
+large maps. The output records `n_null_calibration_cells` and
+`null_calibration_max_cells`.
+
+Expression and DE summaries use all expression-matrix genes by default. To
+restrict those summaries to a query set, pass a newline-delimited list with
+`--query-genes` or a comma-separated list with `--query-gene`. UCell scoring and
+probability calibration still use the full expression matrix and full state/QC
+GMTs; the query gene options only restrict `expression_*` and `de_*` outputs.
+The `--mode expected|hard|both` option controls whether expected/probability
+weighted summaries, hard-assignment summaries, or both are computed. Unrequested
+summary files are still written as header-only tables for interface stability.
 
 Hard calls are optional thresholded derivatives:
 

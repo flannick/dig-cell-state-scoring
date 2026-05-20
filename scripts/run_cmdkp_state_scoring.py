@@ -10,6 +10,7 @@ CMDKP output bundle.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -113,6 +114,35 @@ def load_threshold_yaml(path: str) -> dict[str, float]:
             if value is not None:
                 out[str(key)] = float(value)
     return out
+
+
+def read_gene_list(path: str) -> list[str]:
+    if not path:
+        return []
+    genes: list[str] = []
+    with open(path, "r", encoding="utf-8") as handle:
+        for line in handle:
+            value = line.strip()
+            if not value or value.startswith("#"):
+                continue
+            genes.append(value.split()[0])
+    return list(dict.fromkeys(genes))
+
+
+def resolve_query_genes(args: argparse.Namespace, matrix: pd.DataFrame) -> list[str]:
+    requested = read_gene_list(args.query_genes) if args.query_genes else []
+    if args.query_gene:
+        requested.extend(g.strip() for g in args.query_gene.split(",") if g.strip())
+    if not requested:
+        return list(matrix.columns)
+    requested = list(dict.fromkeys(requested))
+    present = [gene for gene in requested if gene in matrix.columns]
+    missing = [gene for gene in requested if gene not in matrix.columns]
+    if missing:
+        print(f"Warning: {len(missing)} query genes were not found in the expression matrix", file=sys.stderr)
+    if not present:
+        raise SystemExit("No query genes were found in the expression matrix")
+    return present
 
 
 def bh_fdr(pvalues: pd.Series) -> pd.Series:
@@ -458,25 +488,48 @@ def random_gene_sets(present: list[str], genes: list[str], bin_key: pd.Series, n
     return out
 
 
+def stable_seed(*parts: object) -> int:
+    key = "|".join(str(part) for part in parts)
+    digest = hashlib.md5(key.encode("utf-8")).hexdigest()
+    return int(digest[:8], 16)
+
+
+def select_null_calibration_cells(cells: list[str], state_name: str, args: argparse.Namespace) -> list[str]:
+    unique_cells = sorted(dict.fromkeys(cells))
+    max_cells = int(args.null_max_cells)
+    if max_cells <= 0 or len(unique_cells) <= max_cells:
+        return unique_cells
+    rng = np.random.default_rng(args.random_seed + stable_seed("null_calibration", state_name))
+    selected = rng.choice(unique_cells, size=max_cells, replace=False)
+    return sorted(str(cell) for cell in selected)
+
+
+def state_seed(args: argparse.Namespace, label: str, state_name: str) -> int:
+    return int((args.random_seed + stable_seed(label, state_name)) % (2**32 - 1))
+
+
 def null_scores_for_state(
     matrix: pd.DataFrame,
     ranks: pd.DataFrame,
     cells: list[str],
     present: list[str],
     args: argparse.Namespace,
-) -> list[float]:
+    state_name: str,
+) -> tuple[list[float], int]:
     if not present:
-        return []
-    sub_matrix = matrix.loc[cells]
-    sub_ranks = ranks.loc[cells]
+        return [], 0
+    calibration_cells = select_null_calibration_cells(cells, state_name, args)
+    sub_matrix = matrix.loc[calibration_cells]
+    sub_ranks = ranks.loc[calibration_cells]
     means = sub_matrix.mean(axis=0)
     detected = (sub_matrix > 0).mean(axis=0)
     bin_key = make_bins(means, args.expression_bins).astype(str) + ":" + make_bins(detected, args.detection_bins).astype(str)
+    np.random.seed(state_seed(args, "null_sets", state_name))
     random_sets = random_gene_sets(present, list(matrix.columns), bin_key, args.null_n)
     values: list[float] = []
     for genes in random_sets:
         values.extend(ucell_score_from_ranks(sub_ranks, genes, args.max_rank).dropna().tolist())
-    return values
+    return values, len(calibration_cells)
 
 
 def probability_from_null(real_scores: pd.Series, null_scores: list[float], bins: int = 101) -> tuple[pd.Series, str]:
@@ -543,6 +596,8 @@ def calibrate_thresholds(
             "state_name": state_name,
             "mixture_threshold": np.nan,
             "n_cells_in_calibration_group": len(group),
+            "n_null_calibration_cells": np.nan,
+            "null_calibration_max_cells": args.null_max_cells,
             "score_iqr": score_iqr,
             "n_markers_requested": info["n_markers_requested"],
             "n_markers_present": info["n_markers_present"],
@@ -554,17 +609,10 @@ def calibrate_thresholds(
         if score_iqr < args.min_score_iqr:
             rows.append({**base, "threshold_method": "low_dynamic_range", "threshold_value": np.nan, "null_95_threshold": np.nan, "null_99_threshold": np.nan, "threshold_status": "low_dynamic_range"})
             continue
-        cells = group["cell_id"].tolist()
-        sub_matrix = matrix.loc[cells]
-        sub_ranks = ranks.loc[cells]
-        means = sub_matrix.mean(axis=0)
-        detected = (sub_matrix > 0).mean(axis=0)
-        bin_key = make_bins(means, args.expression_bins).astype(str) + ":" + make_bins(detected, args.detection_bins).astype(str)
         present = info["present_list"]
-        random_sets = random_gene_sets(present, list(matrix.columns), bin_key, args.null_n)
-        null_scores = []
-        for genes in random_sets:
-            null_scores.extend(ucell_score_from_ranks(sub_ranks, genes, args.max_rank).dropna().tolist())
+        null_scores, n_null_calibration_cells = null_scores_for_state(
+            matrix, ranks, group["cell_id"].tolist(), present, args, state_name
+        )
         null_95 = float(np.quantile(null_scores, 0.95)) if null_scores else np.nan
         null_99 = float(np.quantile(null_scores, 0.99)) if null_scores else np.nan
         rows.append(
@@ -574,6 +622,7 @@ def calibrate_thresholds(
                 "threshold_value": null_99,
                 "null_95_threshold": null_95,
                 "null_99_threshold": null_99,
+                "n_null_calibration_cells": n_null_calibration_cells,
                 "threshold_status": "ok",
             }
         )
@@ -595,7 +644,9 @@ def compute_probabilities(
         gene_set = gene_sets[state_name]
         info = marker_info(gene_set, matrix.columns)
         cells = group["cell_id"].tolist()
-        null_values = null_scores_for_state(matrix, ranks, cells, info["present_list"], args)
+        null_values, n_null_calibration_cells = null_scores_for_state(
+            matrix, ranks, cells, info["present_list"], args, state_name
+        )
         probs, method = probability_from_null(group["ucell_score"], null_values)
         out = group[["cell_id"]].copy()
         if {"map_id", "tissue", "annotated_cell_type"}.issubset(group.columns):
@@ -606,6 +657,8 @@ def compute_probabilities(
         out["state_probability"] = probs.to_numpy()
         out["probability_method"] = method
         out["n_null_sets"] = args.null_n
+        out["n_null_calibration_cells"] = n_null_calibration_cells
+        out["null_calibration_max_cells"] = args.null_max_cells
         out["marker_coverage_fraction"] = info["marker_coverage_fraction"]
         out["n_markers_present"] = info["n_markers_present"]
         out["n_markers_total"] = info["n_markers_requested"]
@@ -669,38 +722,47 @@ def hard_assignments_from_probabilities(
     qc_thresholds: dict[str, float],
     args: argparse.Namespace,
 ) -> pd.DataFrame:
-    rows = []
-    for _, row in probabilities.iterrows():
-        if row["state_type"] == "qc":
-            threshold = qc_thresholds.get(row["state_name"], args.default_qc_threshold)
-            source = "yaml" if row["state_name"] in qc_thresholds else "default_qc"
-        else:
-            threshold = state_thresholds.get(row["state_name"], args.default_state_threshold)
-            source = "yaml" if row["state_name"] in state_thresholds else "default_biological"
-        coverage_pass = (row["n_markers_present"] >= args.min_markers_present) and (
-            row["marker_coverage_fraction"] >= args.min_marker_coverage
-        )
-        hard_call = bool(coverage_pass and row["state_probability"] >= threshold)
-        if not coverage_pass:
-            reason = "insufficient_marker_coverage"
-        elif hard_call:
-            reason = "probability_above_threshold"
-        else:
-            reason = "probability_below_threshold"
-        rows.append(
-            {
-                "cell_id": row["cell_id"],
-                "state_type": row["state_type"],
-                "state_name": row["state_name"],
-                "state_probability": row["state_probability"],
-                "threshold": threshold,
-                "hard_call": hard_call,
-                "threshold_source": source,
-                "marker_coverage_pass": coverage_pass,
-                "reason": reason,
-            }
-        )
-    return pd.DataFrame(rows)
+    frame = probabilities.copy()
+    state_threshold = frame["state_name"].map(state_thresholds)
+    qc_threshold = frame["state_name"].map(qc_thresholds)
+    frame["threshold"] = np.where(
+        frame["state_type"].eq("qc"),
+        qc_threshold.fillna(args.default_qc_threshold),
+        state_threshold.fillna(args.default_state_threshold),
+    )
+    frame["threshold_source"] = np.where(
+        frame["state_type"].eq("qc"),
+        np.where(qc_threshold.notna(), "yaml", "default_qc"),
+        np.where(state_threshold.notna(), "yaml", "default_biological"),
+    )
+    frame["marker_coverage_pass"] = (frame["n_markers_present"] >= args.min_markers_present) & (
+        frame["marker_coverage_fraction"] >= args.min_marker_coverage
+    )
+    frame["hard_call"] = frame["marker_coverage_pass"] & (frame["state_probability"] >= frame["threshold"])
+    frame["reason"] = np.select(
+        [
+            ~frame["marker_coverage_pass"],
+            frame["hard_call"],
+        ],
+        [
+            "insufficient_marker_coverage",
+            "probability_above_threshold",
+        ],
+        default="probability_below_threshold",
+    )
+    return frame[
+        [
+            "cell_id",
+            "state_type",
+            "state_name",
+            "state_probability",
+            "threshold",
+            "hard_call",
+            "threshold_source",
+            "marker_coverage_pass",
+            "reason",
+        ]
+    ].copy()
 
 
 def qc_exclusions(probabilities: pd.DataFrame, args: argparse.Namespace) -> pd.DataFrame:
@@ -743,9 +805,23 @@ def loo_probability_for_gene(
     if not present:
         return pd.Series(0.0, index=matrix.index)
     score = ucell_score_from_ranks(ranks, present, args.max_rank)
-    null_values = null_scores_for_state(matrix, ranks, list(matrix.index), present, args)
+    null_values, _ = null_scores_for_state(matrix, ranks, list(matrix.index), present, args, f"{state_name}__loo__{gene}")
     probs, _ = probability_from_null(score, null_values)
     return probs
+
+
+EXPECTED_EXPRESSION_COLUMNS = [
+    "gene",
+    "state_name",
+    "state_type",
+    "weighted_mean_expression",
+    "weighted_detection_fraction",
+    "whole_cell_type_mean_expression",
+    "log2_weighted_vs_all",
+    "n_cells",
+    "sum_state_weight",
+    "leave_one_gene_out_used",
+]
 
 
 def expected_expression_summary(
@@ -754,14 +830,16 @@ def expected_expression_summary(
     biological_sets: dict[str, GeneSet],
     ranks: pd.DataFrame,
     args: argparse.Namespace,
+    query_genes: list[str],
 ) -> pd.DataFrame:
     rows = []
-    all_mean = matrix.mean(axis=0)
-    all_detect = (matrix > 0).mean(axis=0)
+    if args.mode == "hard":
+        return empty_table(EXPECTED_EXPRESSION_COLUMNS)
+    all_mean = matrix[query_genes].mean(axis=0)
     bio_probs = probabilities.loc[probabilities["state_type"] == "biological"].copy()
     for state_name, group in bio_probs.groupby("state_name", sort=False):
         weights = group.set_index("cell_id")["state_probability"].reindex(matrix.index).fillna(0.0)
-        for gene in matrix.columns:
+        for gene in query_genes:
             used_loo = False
             gene_weights = weights
             if args.leave_one_gene_out and state_name in biological_sets:
@@ -790,17 +868,35 @@ def expected_expression_summary(
                     "leave_one_gene_out_used": used_loo,
                 }
             )
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows, columns=EXPECTED_EXPRESSION_COLUMNS)
 
 
-def hard_expression_summary(matrix: pd.DataFrame, hard: pd.DataFrame) -> pd.DataFrame:
+HARD_EXPRESSION_COLUMNS = [
+    "gene",
+    "state_name",
+    "state_type",
+    "mean_expression_state_positive",
+    "mean_expression_state_negative",
+    "detection_fraction_positive",
+    "detection_fraction_negative",
+    "log2_fc_positive_vs_negative",
+    "p_value",
+    "q_value",
+    "n_positive_cells",
+    "n_negative_cells",
+]
+
+
+def hard_expression_summary(matrix: pd.DataFrame, hard: pd.DataFrame, args: argparse.Namespace, query_genes: list[str]) -> pd.DataFrame:
     rows = []
+    if args.mode == "expected":
+        return empty_table(HARD_EXPRESSION_COLUMNS)
     bio_hard = hard.loc[hard["state_type"] == "biological"].copy()
     for state_name, group in bio_hard.groupby("state_name", sort=False):
         calls = group.set_index("cell_id")["hard_call"].reindex(matrix.index).fillna(False).astype(bool)
         pos = matrix.loc[calls]
         neg = matrix.loc[~calls]
-        for gene in matrix.columns:
+        for gene in query_genes:
             if len(pos) > 0 and len(neg) > 0:
                 stat = stats.mannwhitneyu(pos[gene], neg[gene], alternative="two-sided").pvalue
             else:
@@ -820,12 +916,12 @@ def hard_expression_summary(matrix: pd.DataFrame, hard: pd.DataFrame) -> pd.Data
                     "n_negative_cells": int(len(neg)),
                 }
             )
-    out = pd.DataFrame(rows)
+    out = pd.DataFrame(rows, columns=[c for c in HARD_EXPRESSION_COLUMNS if c != "q_value"])
     out["q_value"] = bh_fdr(out["p_value"]) if not out.empty else []
-    return out
+    return out[HARD_EXPRESSION_COLUMNS]
 
 
-def donor_weighted_expression(matrix: pd.DataFrame, metadata: pd.DataFrame, weights: pd.Series, donor_col: str) -> pd.DataFrame:
+def donor_weighted_expression(matrix: pd.DataFrame, metadata: pd.DataFrame, weights: pd.Series, donor_col: str, query_genes: list[str]) -> pd.DataFrame:
     rows = []
     meta = metadata.set_index("cell_id").reindex(matrix.index)
     for donor, idx in meta.groupby(donor_col).groups.items():
@@ -834,9 +930,9 @@ def donor_weighted_expression(matrix: pd.DataFrame, metadata: pd.DataFrame, weig
         denom = w.sum()
         values = {"donor_id": donor, "sum_state_weight": float(denom)}
         if denom > 0:
-            weighted = matrix.loc[donor_cells].multiply(w, axis=0).sum(axis=0) / denom
+            weighted = matrix.loc[donor_cells, query_genes].multiply(w, axis=0).sum(axis=0) / denom
         else:
-            weighted = pd.Series(np.nan, index=matrix.columns)
+            weighted = pd.Series(np.nan, index=query_genes)
         values.update(weighted.to_dict())
         rows.append(values)
     return pd.DataFrame(rows)
@@ -878,9 +974,19 @@ def de_summaries(
     hard: pd.DataFrame,
     phenotypes: pd.DataFrame | None,
     args: argparse.Namespace,
+    query_genes: list[str],
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     expected_cols = ["gene", "state_name", "phenotype", "coefficient", "coefficient_units", "p_value", "q_global", "q_by_trait", "q_by_gene", "n_donors", "sum_state_weight", "model_formula"]
     hard_cols = ["gene", "state_name", "phenotype", "coefficient", "coefficient_units", "p_value", "q_global", "q_by_trait", "q_by_gene", "n_donors", "n_state_positive_cells", "model_formula"]
+    if args.mode == "expected":
+        hard_requested = False
+        expected_requested = True
+    elif args.mode == "hard":
+        hard_requested = True
+        expected_requested = False
+    else:
+        hard_requested = True
+        expected_requested = True
     if phenotypes is None or phenotypes.empty:
         return empty_table(expected_cols), empty_table(hard_cols)
     if args.donor_col not in phenotypes.columns:
@@ -895,57 +1001,59 @@ def de_summaries(
     bio_probs = probabilities.loc[probabilities["state_type"] == "biological"]
     for state_name, group in bio_probs.groupby("state_name", sort=False):
         weights = group.set_index("cell_id")["state_probability"].reindex(matrix.index).fillna(0.0)
-        donor_expr = donor_weighted_expression(matrix, metadata, weights, args.donor_col).set_index("donor_id")
-        design = donor_design.reindex(donor_expr.index)
-        for gene in matrix.columns:
-            coef, p, n = fit_simple_lm(donor_expr[gene], design, phenotype)
-            exp_rows.append(
-                {
-                    "gene": gene,
-                    "state_name": state_name,
-                    "phenotype": phenotype,
-                    "coefficient": coef,
-                    "coefficient_units": "expression_per_phenotype_unit",
-                    "p_value": p,
-                    "n_donors": n,
-                    "sum_state_weight": float(weights.sum()),
-                    "model_formula": f"E_d[{gene}|{state_name}] ~ {phenotype}",
-                }
-            )
-        calls = hard.loc[(hard["state_type"] == "biological") & (hard["state_name"] == state_name)].set_index("cell_id")["hard_call"].reindex(matrix.index).fillna(False).astype(bool)
-        for gene in matrix.columns:
-            donor_values = []
+        if expected_requested:
+            donor_expr = donor_weighted_expression(matrix, metadata, weights, args.donor_col, query_genes).set_index("donor_id")
+            design = donor_design.reindex(donor_expr.index)
+            for gene in query_genes:
+                coef, p, n = fit_simple_lm(donor_expr[gene], design, phenotype)
+                exp_rows.append(
+                    {
+                        "gene": gene,
+                        "state_name": state_name,
+                        "phenotype": phenotype,
+                        "coefficient": coef,
+                        "coefficient_units": "expression_per_phenotype_unit",
+                        "p_value": p,
+                        "n_donors": n,
+                        "sum_state_weight": float(weights.sum()),
+                        "model_formula": f"E_d[{gene}|{state_name}] ~ {phenotype}",
+                    }
+                )
+        if hard_requested:
+            calls = hard.loc[(hard["state_type"] == "biological") & (hard["state_name"] == state_name)].set_index("cell_id")["hard_call"].reindex(matrix.index).fillna(False).astype(bool)
             meta = metadata.set_index("cell_id").reindex(matrix.index)
-            for donor, idx in meta.groupby(args.donor_col).groups.items():
-                donor_cells = list(idx)
-                active_cells = [c for c in donor_cells if calls.loc[c]]
-                value = float(matrix.loc[active_cells, gene].mean()) if active_cells else np.nan
-                donor_values.append({"donor_id": donor, "value": value})
-            donor_frame = pd.DataFrame(donor_values).set_index("donor_id")
-            design = donor_design.reindex(donor_frame.index)
-            coef, p, n = fit_simple_lm(donor_frame["value"], design, phenotype)
-            hard_rows.append(
-                {
-                    "gene": gene,
-                    "state_name": state_name,
-                    "phenotype": phenotype,
-                    "coefficient": coef,
-                    "coefficient_units": "expression_per_phenotype_unit",
-                    "p_value": p,
-                    "n_donors": n,
-                    "n_state_positive_cells": int(calls.sum()),
-                    "model_formula": f"mean_hard_positive[{gene}|{state_name}] ~ {phenotype}",
-                }
-            )
-    exp = pd.DataFrame(exp_rows)
-    hard_de = pd.DataFrame(hard_rows)
+            for gene in query_genes:
+                donor_values = []
+                for donor, idx in meta.groupby(args.donor_col).groups.items():
+                    donor_cells = list(idx)
+                    active_cells = [c for c in donor_cells if calls.loc[c]]
+                    value = float(matrix.loc[active_cells, gene].mean()) if active_cells else np.nan
+                    donor_values.append({"donor_id": donor, "value": value})
+                donor_frame = pd.DataFrame(donor_values).set_index("donor_id")
+                design = donor_design.reindex(donor_frame.index)
+                coef, p, n = fit_simple_lm(donor_frame["value"], design, phenotype)
+                hard_rows.append(
+                    {
+                        "gene": gene,
+                        "state_name": state_name,
+                        "phenotype": phenotype,
+                        "coefficient": coef,
+                        "coefficient_units": "expression_per_phenotype_unit",
+                        "p_value": p,
+                        "n_donors": n,
+                        "n_state_positive_cells": int(calls.sum()),
+                        "model_formula": f"mean_hard_positive[{gene}|{state_name}] ~ {phenotype}",
+                    }
+                )
+    exp = pd.DataFrame(exp_rows, columns=[c for c in expected_cols if not c.startswith("q_")])
+    hard_de = pd.DataFrame(hard_rows, columns=[c for c in hard_cols if not c.startswith("q_")])
     for frame in [exp, hard_de]:
         if frame.empty:
             continue
         frame["q_global"] = bh_fdr(frame["p_value"])
         frame["q_by_trait"] = frame.groupby("phenotype", group_keys=False)["p_value"].apply(bh_fdr)
         frame["q_by_gene"] = frame.groupby("gene", group_keys=False)["p_value"].apply(bh_fdr)
-    return exp[expected_cols], hard_de[hard_cols]
+    return exp.reindex(columns=expected_cols), hard_de.reindex(columns=hard_cols)
 
 
 def call_states(scores: pd.DataFrame, thresholds: pd.DataFrame, bad_flags: pd.DataFrame, args: argparse.Namespace) -> pd.DataFrame:
@@ -1103,8 +1211,10 @@ def write_methods(out_dir: Path, args: argparse.Namespace, mapping_info: dict[st
         f"- Gene ID handling: `{mapping_info['gene_id_type']}`",
         f"- Duplicate collapse method: `{mapping_info['duplicate_collapse_method']}`",
         f"- Marker coverage rules: score with at least 1 marker present; confident calls require `n_markers_present >= {args.min_markers_present}` and `marker_coverage_fraction >= {args.min_marker_coverage}`",
-        f"- Thresholding method: matched random gene-set null, null95 and null99 reported, null99 used for state calls, `null_n={args.null_n}`",
+        f"- Thresholding/probability calibration method: matched random gene-set null, null95 and null99 reported, null99 used for legacy state calls, `null_n={args.null_n}`, `null_max_cells={args.null_max_cells}`",
         f"- Calibration group: `map_id + tissue + annotated_cell_type + state_name`; minimum cells `{args.min_calibration_cells}`; minimum score IQR `{args.min_score_iqr}`",
+        f"- Summary query genes: `{args.query_genes or args.query_gene or 'all_expression_matrix_genes'}`",
+        f"- Summary mode: `{args.mode}`",
         "- Bad-cell hard exclusions: technical metric outliers and QC signatures marked with hard-exclude tiers in the auxiliary GMT.",
         "- Bad-cell review flags: ribosomal/translation, heat-shock, immediate-early, and other review-tier QC signatures when extreme.",
         "- Scores are primary and calls are secondary. State calls are multi-label and not mutually exclusive.",
@@ -1146,6 +1256,7 @@ def main() -> None:
     parser.add_argument("--doublet-col", default="")
     parser.add_argument("--max-rank", type=int, default=1500)
     parser.add_argument("--null-n", type=int, default=1000)
+    parser.add_argument("--null-max-cells", type=int, default=20000, help="Maximum cells used per state to estimate matched-null calibration backgrounds; <=0 uses all cells")
     parser.add_argument("--random-seed", type=int, default=1)
     parser.add_argument("--expression-bins", type=int, default=20)
     parser.add_argument("--detection-bins", type=int, default=5)
@@ -1154,6 +1265,8 @@ def main() -> None:
     parser.add_argument("--default-state-threshold", type=float, default=0.80)
     parser.add_argument("--default-qc-threshold", type=float, default=0.95)
     parser.add_argument("--leave-one-gene-out", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--query-genes", default="", help="Optional newline-delimited gene list restricting expression and DE summaries")
+    parser.add_argument("--query-gene", default="", help="Optional comma-separated genes restricting expression and DE summaries")
     parser.add_argument("--min-calibration-cells", type=int, default=100)
     parser.add_argument("--min-score-iqr", type=float, default=0.01)
     parser.add_argument("--qc-extreme-percentile", type=float, default=0.99)
@@ -1208,6 +1321,7 @@ def main() -> None:
     metadata = metadata.drop_duplicates("cell_id").copy()
     expression, mapping_info = harmonize_expression(read_expression_input(args.expression), args.expression_kind, args.gene_map, args.duplicate_collapse)
     matrix = expression_matrix(expression, metadata["cell_id"])
+    query_genes = resolve_query_genes(args, matrix)
     ranks = rank_matrix_for_ucell(matrix, args.max_rank)
 
     biological_sets = read_gmt(args.biological_gmt)
@@ -1223,10 +1337,10 @@ def main() -> None:
     qc_thresholds = load_threshold_yaml(args.qc_thresholds_yaml)
     hard = hard_assignments_from_probabilities(probabilities, state_thresholds, qc_thresholds, args)
     exclusions = qc_exclusions(probabilities, args)
-    expression_expected = expected_expression_summary(matrix, probabilities, {s.name: s for s in biological_sets}, ranks, args)
-    expression_hard = hard_expression_summary(matrix, hard)
+    expression_expected = expected_expression_summary(matrix, probabilities, {s.name: s for s in biological_sets}, ranks, args, query_genes)
+    expression_hard = hard_expression_summary(matrix, hard, args, query_genes)
     phenotypes = read_table(args.phenotypes) if args.phenotypes else None
-    de_expected, de_hard = de_summaries(matrix, metadata, probabilities, hard, phenotypes, args)
+    de_expected, de_hard = de_summaries(matrix, metadata, probabilities, hard, phenotypes, args, query_genes)
 
     calls = call_states(biological_scores, thresholds, bad_flags, args)
     multilabel = multilabel_summary(calls, bad_flags)
@@ -1247,7 +1361,7 @@ def main() -> None:
 
     ucell_scores = build_ucell_scores_output(biological_scores, qc_scores)
     write_table(ucell_scores, output_path(args, "ucell_scores_out", "ucell_scores.tsv.gz"))
-    write_table(probabilities[["cell_id", "state_type", "state_name", "ucell_score", "state_probability", "probability_method", "n_null_sets", "marker_coverage_fraction"]], output_path(args, "cell_state_probabilities_out", "cell_state_probabilities.tsv.gz"))
+    write_table(probabilities[["cell_id", "state_type", "state_name", "ucell_score", "state_probability", "probability_method", "n_null_sets", "n_null_calibration_cells", "null_calibration_max_cells", "marker_coverage_fraction"]], output_path(args, "cell_state_probabilities_out", "cell_state_probabilities.tsv.gz"))
     write_table(hard, output_path(args, "cell_state_hard_assignments_out", "cell_state_hard_assignments.tsv.gz"))
     write_table(exclusions, output_path(args, "qc_exclusions_out", "qc_exclusions.tsv.gz"))
     write_table(expression_expected, output_path(args, "expression_expected_assignments_out", "expression_expected_assignments.tsv.gz"))
@@ -1276,6 +1390,10 @@ def main() -> None:
             "mode": args.mode,
             "max_rank": args.max_rank,
             "null_n": args.null_n,
+            "null_max_cells": args.null_max_cells,
+            "query_genes": args.query_genes or None,
+            "query_gene": args.query_gene or None,
+            "n_query_genes": len(query_genes),
             "default_state_threshold": args.default_state_threshold,
             "default_qc_threshold": args.default_qc_threshold,
             "leave_one_gene_out": args.leave_one_gene_out,
