@@ -166,8 +166,8 @@ biological state labels.
 
 `run_cmdkp_state_scoring.py` writes the standard output bundle below.
 
-The simplified continuous workflow additionally writes probability, hard-call,
-expression, DE, and run-summary outputs. These are the preferred downstream
+The simplified continuous workflow additionally writes raw UCell activity,
+hard-call, expression, DE, and run-summary outputs. These are the preferred downstream
 interfaces.
 
 ### `ucell_scores.tsv.gz`
@@ -184,7 +184,7 @@ Columns:
 - `markers_present`
 - `markers_missing`
 
-### `cell_state_probabilities.tsv.gz`
+### `cell_state_activity.tsv.gz`
 
 Columns:
 
@@ -192,36 +192,18 @@ Columns:
 - `state_type`
 - `state_name`
 - `ucell_score`
-- `state_probability`
-- `probability_method`
-- `n_null_sets`
-- `n_null_calibration_cells`
-- `null_calibration_max_cells`
+- `state_activity`
+- `activity_method`
 - `marker_coverage_fraction`
 
-Probability calibration details:
+Activity details:
 
 - `ucell_score` is the observed local UCell-style score for one cell and one
   state.
-- `state_probability` is a probability-like activity weight derived by comparing
-  the observed score to matched random gene-set null scores. It is not a
-  mutually exclusive posterior probability, and probabilities across states are
-  not expected to sum to one.
-- For each state, the runner samples `n_null_sets` random gene sets matched to
-  the observed marker set by gene-set size, expression bin, and detection-rate
-  bin. The random sets are scored with the same UCell-style statistic as the
-  real state.
-- The pooled random-set scores estimate the state-specific null density. The
-  observed scores for that state estimate the state-specific observed density.
-  The runner reports `probability_method = smoothed_histogram_lfdr` when the
-  smoothed density-ratio estimate succeeds and
-  `probability_method = empirical_null_cdf_fallback` when it falls back to the
-  empirical null CDF.
-- The matched-null probability background is estimated from a deterministic
-  state-specific calibration subset of cells. `null_calibration_max_cells`
-  records the requested `--null-max-cells` cap, and
-  `n_null_calibration_cells` records how many cells were actually used. A cap of
-  `0` means use all cells scored for that state.
+- `state_activity` is equal to `ucell_score`.
+- `activity_method` is `raw_ucell_score`.
+- No probability calibration, matched random gene-set null, or local-FDR
+  conversion is applied.
 
 Expression and DE summary interfaces:
 
@@ -230,8 +212,7 @@ Expression and DE summary interfaces:
   `expression_expected_assignments.tsv.gz`,
   `expression_hard_assignments.tsv.gz`, `de_expected_assignments.tsv.gz`, and
   `de_hard_assignments.tsv.gz`.
-- Query-gene restriction does not change UCell scoring, probability calibration,
-  or hard state calls.
+- Query-gene restriction does not change UCell scoring or hard state calls.
 - `--mode expected|hard|both` controls which expression and DE summary families
   are computed. Unrequested summary outputs are written as header-only files.
 
@@ -242,7 +223,7 @@ Columns:
 - `cell_id`
 - `state_type`
 - `state_name`
-- `state_probability`
+- `state_activity`
 - `threshold`
 - `hard_call`
 - `threshold_source`
@@ -257,7 +238,7 @@ Columns:
 - `excluded`
 - `exclusion_reason`
 - `triggering_qc_states`
-- `max_qc_probability`
+- `max_qc_activity`
 
 ### `expression_expected_assignments.tsv.gz`
 
@@ -298,7 +279,7 @@ with headers even when no phenotype table is supplied.
 
 ### `state_summary.tsv.gz` and `run_summary.json`
 
-`state_summary.tsv.gz` provides one row per state with mean score/probability
+`state_summary.tsv.gz` provides one row per state with mean score/activity
 and hard-call counts. `run_summary.json` records inputs, parameters, dimensions,
 software versions, timestamp, and the number of QC-excluded cells.
 
@@ -321,7 +302,7 @@ One row per cell per relevant biological state:
 
 ### `cell_state_thresholds.tsv.gz`
 
-One row per map/tissue/cell-type/state calibration group:
+One row per map/tissue/cell-type/state threshold eligibility group:
 
 - `map_id`
 - `tissue`
@@ -329,8 +310,6 @@ One row per map/tissue/cell-type/state calibration group:
 - `state_name`
 - `threshold_method`
 - `threshold_value`
-- `null_95_threshold`
-- `null_99_threshold`
 - `mixture_threshold`
 - `n_cells_in_calibration_group`
 - `score_iqr`

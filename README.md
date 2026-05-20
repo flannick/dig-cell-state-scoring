@@ -176,7 +176,6 @@ integrated embeddings, PCA coordinates, or other latent spaces as scoring input.
   --cell-type-col cell_type \
   --donor-col donor_id \
   --sample-col sample_id \
-  --null-max-cells 20000 \
   --query-genes results/cell_state_de/query_genes.txt \
   --mode both
 ```
@@ -192,7 +191,7 @@ where the mapping table contains `gene_id` and `gene_symbol` columns.
 The runner writes:
 
 - `ucell_scores.tsv.gz`
-- `cell_state_probabilities.tsv.gz`
+- `cell_state_activity.tsv.gz`
 - `cell_state_hard_assignments.tsv.gz`
 - `qc_exclusions.tsv.gz`
 - `expression_expected_assignments.tsv.gz`
@@ -210,7 +209,7 @@ The runner writes:
 - `state_call_summary.tsv.gz`
 - `state_scoring_method.md`
 
-### Interpreting scores, probabilities, and hard calls
+### Interpreting scores, activity, and hard calls
 
 The primary score is a local UCell-style rank score:
 
@@ -219,61 +218,30 @@ u_is = UCell(x_i, G_s)
 ```
 
 where `x_i` is the expression vector for cell `i` and `G_s` is the marker set
-for state `s`. UCell scores are activity scores in `[0, 1]`; they are not
-posterior probabilities.
-
-The runner converts UCell scores into probability-like state activity weights by
-comparing each state to matched random gene-set null scores:
+for state `s`. The raw UCell score is the state activity weight used everywhere
+downstream:
 
 ```text
-lfdr_is = min(1, f0_s(u_is) / fobs_s(u_is))
-p_state_is = 1 - lfdr_is
+a_is = u_is
 ```
 
-The null density `f0_s` and observed density `fobs_s` are estimated with
-smoothed histograms on `[0, 1]`. If density estimation is not stable, the runner
-falls back to an empirical null CDF. The resulting `p_state_is` values are
-independent across states and do not sum to one. Interpret them as evidence that
-a state signature exceeds matched gene-set background, not as mutually exclusive
-cell-state posteriors.
-
-Calibration is state-specific. For each biological or QC state, the runner:
-
-1. identifies marker genes present in the expression matrix;
-2. bins genes by mean expression and detection rate;
-3. samples `--null-n` random gene sets with the same size as the observed state
-   marker set, preferentially matching each marker to genes from the same
-   expression/detection bin;
-4. scores each random gene set with the same UCell-style rank statistic;
-5. pools those random-set scores to estimate `f0_s`, the matched-gene-set null
-   background for state `s`;
-6. uses the observed state scores for state `s` to estimate `fobs_s`;
-7. converts each cell's observed score to `p_state_is` using the local-FDR
-   equation above and enforces monotonicity so higher UCell scores cannot receive
-   lower probability-like weights.
-
-The Python continuous workflow estimates this probability background from a
-deterministic calibration subset of cells scored for that state. The maximum
-subset size is controlled by `--null-max-cells` and defaults to `20000`; use
-`--null-max-cells 0` to use all scored cells. This keeps the null work closer to
-`n_states * --null-n * min(n_cells_in_state_calibration_group, null_max_cells)`
-instead of forcing every random gene set to be scored over every cell in very
-large maps. The output records `n_null_calibration_cells` and
-`null_calibration_max_cells`.
+There is no probability calibration, matched random gene-set null, local-FDR
+step, or requirement that activities sum to one. Interpret `a_is` as a
+continuous signature activity score, not as a posterior probability.
 
 Expression and DE summaries use all expression-matrix genes by default. To
 restrict those summaries to a query set, pass a newline-delimited list with
-`--query-genes` or a comma-separated list with `--query-gene`. UCell scoring and
-probability calibration still use the full expression matrix and full state/QC
-GMTs; the query gene options only restrict `expression_*` and `de_*` outputs.
-The `--mode expected|hard|both` option controls whether expected/probability
-weighted summaries, hard-assignment summaries, or both are computed. Unrequested
-summary files are still written as header-only tables for interface stability.
+`--query-genes` or a comma-separated list with `--query-gene`. UCell scoring
+still uses the full expression matrix and full state/QC GMTs; the query gene
+options only restrict `expression_*` and `de_*` outputs. The
+`--mode expected|hard|both` option controls whether expected/activity-weighted
+summaries, hard-assignment summaries, or both are computed. Unrequested summary
+files are still written as header-only tables for interface stability.
 
 Hard calls are optional thresholded derivatives:
 
 ```text
-I_is = 1[p_state_is >= tau_s]
+I_is = 1[a_is >= tau_s]
 ```
 
 Defaults are `tau_s = 0.80` for biological states and `0.95` for QC states,
@@ -284,11 +252,11 @@ QC exclusion is never applied silently. Cells are excluded only if
 `--exclude-qc-above` is supplied, and `qc_exclusions.tsv.gz` records the
 triggering QC states and reasons.
 
-Expected expression uses probability weights:
+Expected expression uses raw UCell activity weights:
 
 ```text
-E[g | s] = sum_i p_state_is x_ig / sum_i p_state_is
-E_d[g | s] = sum_{i in donor d} p_state_is x_ig / sum_{i in donor d} p_state_is
+E[g | s] = sum_i a_is x_ig / sum_i a_is
+E_d[g | s] = sum_{i in donor d} a_is x_ig / sum_{i in donor d} a_is
 ```
 
 When a query gene is part of a state marker set, leave-one-gene-out scoring is

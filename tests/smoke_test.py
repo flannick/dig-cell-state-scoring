@@ -338,10 +338,6 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
             str(state_thresholds_path),
             "--out-dir",
             str(out_dir),
-            "--null-n",
-            "5",
-            "--null-max-cells",
-            "3",
             "--query-genes",
             str(query_genes_path),
             "--min-calibration-cells",
@@ -369,7 +365,7 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
     expected.update(
         {
             "ucell_scores.tsv.gz",
-            "cell_state_probabilities.tsv.gz",
+            "cell_state_activity.tsv.gz",
             "cell_state_hard_assignments.tsv.gz",
             "qc_exclusions.tsv.gz",
             "expression_expected_assignments.tsv.gz",
@@ -384,12 +380,10 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
     scores = pd.read_csv(out_dir / "cell_state_scores.tsv.gz", sep="\t")
     assert {"markers_present", "markers_missing", "marker_coverage_fraction"}.issubset(scores.columns)
     assert scores["ucell_score"].notna().all()
-    probabilities = pd.read_csv(out_dir / "cell_state_probabilities.tsv.gz", sep="\t")
-    assert probabilities["state_probability"].between(0, 1).all()
-    assert {"n_null_calibration_cells", "null_calibration_max_cells"}.issubset(probabilities.columns)
-    assert probabilities["n_null_calibration_cells"].max() <= 3
-    assert (probabilities["null_calibration_max_cells"] == 3).all()
-    assert (probabilities.groupby("cell_id")["state_probability"].sum() <= 1).any() or (probabilities.groupby("cell_id")["state_probability"].sum() > 1).any()
+    activity = pd.read_csv(out_dir / "cell_state_activity.tsv.gz", sep="\t")
+    assert activity["state_activity"].dropna().between(0, 1).all()
+    assert activity["state_activity"].equals(activity["ucell_score"])
+    assert (activity["activity_method"] == "raw_ucell_score").all()
     hard_assignments = pd.read_csv(out_dir / "cell_state_hard_assignments.tsv.gz", sep="\t")
     assert {"hard_call", "threshold", "marker_coverage_pass"}.issubset(hard_assignments.columns)
     state_a = hard_assignments.loc[hard_assignments["state_name"] == "pancreas_beta_cell_state_a"]
@@ -403,14 +397,13 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
     hard_expr = pd.read_csv(out_dir / "expression_hard_assignments.tsv.gz", sep="\t")
     assert set(hard_expr["gene"]) == {"G1", "G3"}
     run_summary = json.loads((out_dir / "run_summary.json").read_text(encoding="utf-8"))
-    assert run_summary["parameters"]["null_max_cells"] == 3
     assert run_summary["parameters"]["n_query_genes"] == 2
     qc = pd.read_csv(out_dir / "bad_cell_qc_flags.tsv.gz", sep="\t")
     assert {"hard_exclusion_flag", "review_flag"}.issubset(qc.columns)
     calls = pd.read_csv(out_dir / "cell_state_calls.tsv.gz", sep="\t")
     composite = calls.loc[calls["state_name"].str.contains("dedifferentiation")]
     assert composite["requires_composite_validation"].all()
-    assert set(composite.loc[composite["call"] != "inactive", "call"]).issubset({"exploratory_marker_high"})
+    assert "active" not in set(composite["call"])
     methods = (out_dir / "state_scoring_method.md").read_text(encoding="utf-8")
     assert "local_ucell_style_rank_statistic" in methods
 
@@ -430,8 +423,6 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
             str(gene_map_path),
             "--out-dir",
             str(out_dir_excluded),
-            "--null-n",
-            "5",
             "--min-calibration-cells",
             "2",
             "--min-markers-present",
