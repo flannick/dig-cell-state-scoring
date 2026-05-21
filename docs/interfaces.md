@@ -166,9 +166,9 @@ biological state labels.
 
 `run_cmdkp_state_scoring.py` writes the standard output bundle below.
 
-The simplified continuous workflow additionally writes raw UCell activity,
-hard-call, expression, DE, and run-summary outputs. These are the preferred downstream
-interfaces.
+The simplified continuous workflow additionally writes AUCell/UCell scores,
+AUCell-based hard calls, state-excess soft weights, expression, DE, and
+run-summary outputs. These are the preferred downstream interfaces.
 
 ### `ucell_scores.tsv.gz`
 
@@ -178,6 +178,7 @@ Columns:
 - `state_type`
 - `state_name`
 - `ucell_score`
+- `aucell_score`
 - `n_markers_present`
 - `n_markers_total`
 - `marker_coverage_fraction`
@@ -192,18 +193,24 @@ Columns:
 - `state_type`
 - `state_name`
 - `ucell_score`
-- `state_activity`
-- `activity_method`
+- `aucell_score`
+- `state_activity_weight`
+- `soft_weight_method`
+- `threshold_value`
+- `threshold_status`
+- `threshold_method`
+- `q75_score`
+- `q99_score`
 - `marker_coverage_fraction`
 
 Activity details:
 
-- `ucell_score` is the observed local UCell-style score for one cell and one
-  state.
-- `state_activity` is equal to `ucell_score`.
-- `activity_method` is `raw_ucell_score`.
-- No probability calibration, matched random gene-set null, or local-FDR
-  conversion is applied.
+- `ucell_score` is retained as a scalable signature score.
+- `aucell_score` is used for biological hard-call thresholding and biological
+  soft weights.
+- `state_activity_weight` is threshold-to-q99 scaled for hard-callable states
+  and q75-to-q99 scaled for continuous-only states.
+- Weights are independent across states and are not probabilities.
 
 Expression and DE summary interfaces:
 
@@ -212,7 +219,7 @@ Expression and DE summary interfaces:
   `expression_expected_assignments.tsv.gz`,
   `expression_hard_assignments.tsv.gz`, `de_expected_assignments.tsv.gz`, and
   `de_hard_assignments.tsv.gz`.
-- Query-gene restriction does not change UCell scoring or hard state calls.
+- Query-gene restriction does not change state scoring or hard state calls.
 - `--mode expected|hard|both` controls which expression and DE summary families
   are computed. Unrequested summary outputs are written as header-only files.
 
@@ -223,7 +230,9 @@ Columns:
 - `cell_id`
 - `state_type`
 - `state_name`
-- `state_activity`
+- `aucell_score`
+- `ucell_score`
+- `state_activity_weight`
 - `threshold`
 - `hard_call`
 - `threshold_source`
@@ -313,6 +322,11 @@ One row per map/tissue/cell-type/state threshold eligibility group:
 - `mixture_threshold`
 - `n_cells_in_calibration_group`
 - `score_iqr`
+- `q50_score`
+- `q75_score`
+- `q99_score`
+- `active_fraction_at_threshold`
+- `threshold_reason`
 - `n_markers_requested`
 - `n_markers_present`
 - `marker_coverage_fraction`

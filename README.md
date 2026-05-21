@@ -211,27 +211,42 @@ The runner writes:
 
 ### Interpreting scores, activity, and hard calls
 
-The primary score is a local UCell-style rank score:
+The runner computes two local rank-based scores:
 
 ```text
 u_is = UCell(x_i, G_s)
+a_is = AUCell(x_i, G_s)
 ```
 
 where `x_i` is the expression vector for cell `i` and `G_s` is the marker set
-for state `s`. The raw UCell score is the state activity weight used everywhere
-downstream:
+for state `s`. UCell is retained as a scalable signature score. AUCell is used
+for collaborator-facing hard state calls and soft state-excess weights.
+
+For each biological state, the runner explores the AUCell score distribution
+within each `map_id + tissue + annotated_cell_type + state_name` group. A hard
+threshold is accepted only when a minimum-density valley between lower- and
+higher-AUCell regions supports a state-active population, or when an explicit
+YAML threshold is supplied. Otherwise the state is marked `continuous_only` and
+no hard-positive cells are forced.
+
+Soft weights are threshold-centered when a hard threshold exists:
 
 ```text
-a_is = u_is
+w_is = clip((a_is - T_s) / (Q99_s - T_s), 0, 1)
 ```
 
-There is no probability calibration, matched random gene-set null, local-FDR
-step, or requirement that activities sum to one. Interpret `a_is` as a
-continuous signature activity score, not as a posterior probability.
+For continuous-only states, soft weights use the high tail:
+
+```text
+w_is = clip((a_is - Q75_s) / (Q99_s - Q75_s), 0, 1)
+```
+
+Weights are normalized within state across cells, not across states within a
+cell. They do not sum to one and are not probabilities.
 
 Expression and DE summaries use all expression-matrix genes by default. To
 restrict those summaries to a query set, pass a newline-delimited list with
-`--query-genes` or a comma-separated list with `--query-gene`. UCell scoring
+`--query-genes` or a comma-separated list with `--query-gene`. State scoring
 still uses the full expression matrix and full state/QC GMTs; the query gene
 options only restrict `expression_*` and `de_*` outputs. The
 `--mode expected|hard|both` option controls whether expected/activity-weighted
@@ -241,22 +256,22 @@ files are still written as header-only tables for interface stability.
 Hard calls are optional thresholded derivatives:
 
 ```text
-I_is = 1[a_is >= tau_s]
+I_is = 1[a_is >= T_s]
 ```
 
-Defaults are `tau_s = 0.80` for biological states and `0.95` for QC states,
-with per-state overrides from YAML. Marker coverage must pass
-`n_markers_present >= 5` and `marker_coverage_fraction >= 0.50` for hard calls.
+Marker coverage must pass `n_markers_present >= 5` and
+`marker_coverage_fraction >= 0.50` for hard calls. QC signatures use the QC
+activity threshold, default `0.95`, unless overridden by YAML.
 
 QC exclusion is never applied silently. Cells are excluded only if
 `--exclude-qc-above` is supplied, and `qc_exclusions.tsv.gz` records the
 triggering QC states and reasons.
 
-Expected expression uses raw UCell activity weights:
+Expected expression uses state-excess activity weights:
 
 ```text
-E[g | s] = sum_i a_is x_ig / sum_i a_is
-E_d[g | s] = sum_{i in donor d} a_is x_ig / sum_{i in donor d} a_is
+E[g | s] = sum_i w_is x_ig / sum_i w_is
+E_d[g | s] = sum_{i in donor d} w_is x_ig / sum_{i in donor d} w_is
 ```
 
 When a query gene is part of a state marker set, leave-one-gene-out scoring is

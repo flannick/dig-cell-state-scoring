@@ -2,8 +2,9 @@
 """Run the general CMDKP cell-state scoring and calling workflow.
 
 The runner consumes an exported cell x gene expression table plus cell metadata.
-It scores biological state GMTs and the auxiliary bad-cell QC GMT with a local
-UCell-style rank statistic and writes the standard CMDKP output bundle.
+It scores biological state GMTs and the auxiliary bad-cell QC GMT with local
+rank-based UCell- and AUCell-style statistics and writes the standard CMDKP
+output bundle.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ import numpy as np
 import pandas as pd
 import yaml
 from scipy import stats
+from scipy.ndimage import gaussian_filter1d
 
 
 PROCESS_TOKENS = {
@@ -107,7 +109,7 @@ def load_threshold_yaml(path: str) -> dict[str, float]:
     if isinstance(obj, dict):
         for key, value in obj.items():
             if isinstance(value, dict):
-                value = value.get("threshold", value.get("state_activity", value.get("ucell_score")))
+                value = value.get("threshold", value.get("aucell_score"))
             if value is not None:
                 out[str(key)] = float(value)
     return out
@@ -236,6 +238,10 @@ def rank_matrix_for_ucell(matrix: pd.DataFrame, max_rank: int) -> pd.DataFrame:
     return ranks
 
 
+def rank_matrix_for_aucell(matrix: pd.DataFrame) -> pd.DataFrame:
+    return matrix.rank(axis=1, ascending=False, method="average")
+
+
 def ucell_score_from_ranks(ranks: pd.DataFrame, genes: list[str], max_rank: int) -> pd.Series:
     present = [g for g in genes if g in ranks.columns]
     n = len(present)
@@ -247,6 +253,18 @@ def ucell_score_from_ranks(ranks: pd.DataFrame, genes: list[str], max_rank: int)
     rank_sum = ranks[present].sum(axis=1)
     u_stat = rank_sum - (n * (n + 1)) / 2
     return (1 - (u_stat / max_u)).clip(0, 1)
+
+
+def aucell_score_from_ranks(ranks: pd.DataFrame, genes: list[str], auc_max_rank: int) -> pd.Series:
+    present = [g for g in genes if g in ranks.columns]
+    if not present or auc_max_rank < 1:
+        return pd.Series(np.nan, index=ranks.index)
+    top = ranks[present].where(ranks[present] <= auc_max_rank)
+    recovery = (auc_max_rank - top + 1).clip(lower=0).sum(axis=1)
+    max_recovery = len(present) * auc_max_rank
+    if max_recovery <= 0:
+        return pd.Series(np.nan, index=ranks.index)
+    return (recovery / max_recovery).clip(0, 1)
 
 
 def marker_info(gene_set: GeneSet, matrix_genes: Iterable[str]) -> dict[str, object]:
@@ -301,7 +319,8 @@ def is_composite_state(state_name: str) -> bool:
 
 def score_biological_states(
     matrix: pd.DataFrame,
-    ranks: pd.DataFrame,
+    ucell_ranks: pd.DataFrame,
+    aucell_ranks: pd.DataFrame,
     metadata: pd.DataFrame,
     gene_sets: list[GeneSet],
     args: argparse.Namespace,
@@ -313,10 +332,12 @@ def score_biological_states(
     for gene_set in gene_sets:
         scope_tissue, scope_cell_type, _ = infer_state_scope(gene_set.name, tissues, cell_types)
         info = marker_info(gene_set, matrix.columns)
-        score = ucell_score_from_ranks(ranks, info["present_list"], args.max_rank)
+        ucell_score = ucell_score_from_ranks(ucell_ranks, info["present_list"], args.max_rank)
+        aucell_score = aucell_score_from_ranks(aucell_ranks, info["present_list"], args.aucell_max_rank)
         score_frame = metadata[["cell_id", args.map_id_col, args.tissue_col, args.cell_type_col]].copy()
         score_frame["state_name"] = gene_set.name
-        score_frame["ucell_score"] = score.reindex(score_frame["cell_id"]).to_numpy()
+        score_frame["ucell_score"] = ucell_score.reindex(score_frame["cell_id"]).to_numpy()
+        score_frame["aucell_score"] = aucell_score.reindex(score_frame["cell_id"]).to_numpy()
         score_frame["scope_tissue"] = scope_tissue
         score_frame["scope_cell_type"] = scope_cell_type
         score_frame["state_kind"] = state_kind(gene_set.name)
@@ -332,7 +353,7 @@ def score_biological_states(
         if score_frame.empty:
             continue
         score_frame["score_percentile_within_calibration_group"] = (
-            score_frame.groupby(group_keys + ["state_name"])["ucell_score"].rank(pct=True, method="average")
+            score_frame.groupby(group_keys + ["state_name"])["aucell_score"].rank(pct=True, method="average")
         )
         rows.append(score_frame)
     if not rows:
@@ -349,7 +370,8 @@ def score_biological_states(
 
 def score_qc_signatures(
     matrix: pd.DataFrame,
-    ranks: pd.DataFrame,
+    ucell_ranks: pd.DataFrame,
+    aucell_ranks: pd.DataFrame,
     metadata: pd.DataFrame,
     qc_sets: list[GeneSet],
     args: argparse.Namespace,
@@ -357,10 +379,12 @@ def score_qc_signatures(
     rows = []
     for gene_set in qc_sets:
         info = marker_info(gene_set, matrix.columns)
-        score = ucell_score_from_ranks(ranks, info["present_list"], args.max_rank)
+        ucell_score = ucell_score_from_ranks(ucell_ranks, info["present_list"], args.max_rank)
+        aucell_score = aucell_score_from_ranks(aucell_ranks, info["present_list"], args.aucell_max_rank)
         frame = metadata[["cell_id", args.map_id_col, args.tissue_col, args.cell_type_col, args.sample_col]].copy()
         frame["qc_signature_name"] = gene_set.name
-        frame["ucell_score"] = score.reindex(frame["cell_id"]).to_numpy()
+        frame["ucell_score"] = ucell_score.reindex(frame["cell_id"]).to_numpy()
+        frame["aucell_score"] = aucell_score.reindex(frame["cell_id"]).to_numpy()
         frame["qc_tier"] = gene_set.meta.get("tier", "")
         frame["qc_category"] = gene_set.meta.get("category", "")
         frame["score_percentile_within_sample"] = (
@@ -472,14 +496,51 @@ def qc_metrics(matrix: pd.DataFrame, metadata: pd.DataFrame, qc_scores: pd.DataF
     )
 
 
+def explore_aucell_threshold(scores: pd.Series, args: argparse.Namespace) -> tuple[float, str, str, float]:
+    values = pd.to_numeric(scores, errors="coerce").dropna().clip(0, 1)
+    if len(values) < args.min_calibration_cells:
+        return np.nan, "insufficient_cells", "calibration_group_below_min_cells", np.nan
+    if values.quantile(0.75) - values.quantile(0.25) < args.min_score_iqr:
+        return np.nan, "continuous_only", "aucell_iqr_below_minimum", np.nan
+    if values.nunique() < 4:
+        return np.nan, "continuous_only", "too_few_unique_aucell_scores", np.nan
+    edges = np.linspace(0, 1, args.aucell_threshold_bins + 1)
+    hist, _ = np.histogram(values, bins=edges, density=False)
+    smooth = gaussian_filter1d(hist.astype(float), sigma=args.aucell_threshold_smoothing)
+    centers = (edges[:-1] + edges[1:]) / 2
+    median = float(values.median())
+    left = np.where(centers <= median)[0]
+    right = np.where(centers > median)[0]
+    if len(left) == 0 or len(right) == 0 or smooth[left].max() <= 0 or smooth[right].max() <= 0:
+        return np.nan, "continuous_only", "no_two_density_regions", np.nan
+    left_peak = left[np.argmax(smooth[left])]
+    right_peak = right[np.argmax(smooth[right])]
+    if right_peak <= left_peak + 1:
+        return np.nan, "continuous_only", "no_density_valley_between_peaks", np.nan
+    valley_region = np.arange(left_peak + 1, right_peak)
+    valley = valley_region[np.argmin(smooth[valley_region])]
+    threshold = float(centers[valley])
+    active_fraction = float((values >= threshold).mean())
+    if active_fraction < args.aucell_min_active_fraction or active_fraction > args.aucell_max_active_fraction:
+        return np.nan, "continuous_only", "active_fraction_outside_bounds", active_fraction
+    if values.quantile(0.99) <= threshold:
+        return np.nan, "continuous_only", "q99_not_above_threshold", active_fraction
+    return threshold, "hard_callable", "minimum_density_threshold", active_fraction
+
+
 def calibrate_thresholds(
     scores: pd.DataFrame,
     args: argparse.Namespace,
+    state_thresholds: dict[str, float],
 ) -> pd.DataFrame:
     rows = []
     for keys, group in scores.groupby(["map_id", "tissue", "annotated_cell_type", "state_name"], sort=False):
         map_id, tissue, cell_type, state_name = keys
-        score_iqr = group["ucell_score"].quantile(0.75) - group["ucell_score"].quantile(0.25)
+        aucell = pd.to_numeric(group["aucell_score"], errors="coerce")
+        score_iqr = aucell.quantile(0.75) - aucell.quantile(0.25)
+        q50 = float(aucell.quantile(0.50)) if aucell.notna().any() else np.nan
+        q75 = float(aucell.quantile(0.75)) if aucell.notna().any() else np.nan
+        q99 = float(aucell.quantile(0.99)) if aucell.notna().any() else np.nan
         base = {
             "map_id": map_id,
             "tissue": tissue,
@@ -488,22 +549,41 @@ def calibrate_thresholds(
             "mixture_threshold": np.nan,
             "n_cells_in_calibration_group": len(group),
             "score_iqr": score_iqr,
+            "q50_score": q50,
+            "q75_score": q75,
+            "q99_score": q99,
             "n_markers_requested": group["n_markers_requested"].iloc[0],
             "n_markers_present": group["n_markers_present"].iloc[0],
             "marker_coverage_fraction": group["marker_coverage_fraction"].iloc[0],
         }
         if len(group) < args.min_calibration_cells:
-            rows.append({**base, "threshold_method": "insufficient_cells", "threshold_value": np.nan, "threshold_status": "insufficient_cells"})
+            rows.append({**base, "threshold_method": "insufficient_cells", "threshold_value": np.nan, "threshold_status": "insufficient_cells", "threshold_reason": "calibration_group_below_min_cells", "active_fraction_at_threshold": np.nan})
             continue
         if score_iqr < args.min_score_iqr:
-            rows.append({**base, "threshold_method": "low_dynamic_range", "threshold_value": np.nan, "threshold_status": "low_dynamic_range"})
+            rows.append({**base, "threshold_method": "continuous_only", "threshold_value": np.nan, "threshold_status": "continuous_only", "threshold_reason": "aucell_iqr_below_minimum", "active_fraction_at_threshold": np.nan})
             continue
+        if state_name in state_thresholds:
+            threshold = state_thresholds[state_name]
+            rows.append(
+                {
+                    **base,
+                    "threshold_method": "yaml_aucell_threshold",
+                    "threshold_value": threshold,
+                    "threshold_status": "hard_callable",
+                    "threshold_reason": "yaml_override",
+                    "active_fraction_at_threshold": float((aucell >= threshold).mean()),
+                }
+            )
+            continue
+        threshold, status, reason, active_fraction = explore_aucell_threshold(aucell, args)
         rows.append(
             {
                 **base,
-                "threshold_method": "ucell_score_threshold",
-                "threshold_value": args.default_state_threshold,
-                "threshold_status": "ok",
+                "threshold_method": "aucell_minimum_density" if status == "hard_callable" else "continuous_only",
+                "threshold_value": threshold,
+                "threshold_status": status,
+                "threshold_reason": reason,
+                "active_fraction_at_threshold": active_fraction,
             }
         )
     return pd.DataFrame(rows)
@@ -513,9 +593,13 @@ def compute_activity(
     scores: pd.DataFrame,
     state_col: str,
     state_type: str,
+    thresholds: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     rows = []
     score_state_col = "state_name" if state_col == "state_name" else "qc_signature_name"
+    threshold_lookup = None
+    if thresholds is not None and not thresholds.empty:
+        threshold_lookup = thresholds.set_index(["map_id", "tissue", "annotated_cell_type", "state_name"])
     for state_name, group in scores.groupby(score_state_col, sort=False):
         out = group[["cell_id"]].copy()
         if {"map_id", "tissue", "annotated_cell_type"}.issubset(group.columns):
@@ -523,8 +607,59 @@ def compute_activity(
         out["state_type"] = state_type
         out["state_name"] = state_name
         out["ucell_score"] = group["ucell_score"].to_numpy()
-        out["state_activity"] = group["ucell_score"].to_numpy()
-        out["activity_method"] = "raw_ucell_score"
+        out["aucell_score"] = group["aucell_score"].to_numpy()
+        out["threshold_value"] = np.nan
+        out["threshold_status"] = "not_applicable_qc" if state_type == "qc" else "continuous_only"
+        out["threshold_method"] = "not_applicable_qc" if state_type == "qc" else "continuous_only"
+        out["q75_score"] = np.nan
+        out["q99_score"] = np.nan
+        if state_type == "biological" and threshold_lookup is not None:
+            key_cols = ["map_id", "tissue", "annotated_cell_type", "state_name"]
+            merged = group[key_cols].drop_duplicates().merge(
+                thresholds[
+                    key_cols
+                    + [
+                        "threshold_value",
+                        "threshold_status",
+                        "threshold_method",
+                        "q75_score",
+                        "q99_score",
+                    ]
+                ],
+                on=key_cols,
+                how="left",
+            )
+            if not merged.empty:
+                threshold_value = merged["threshold_value"].iloc[0]
+                threshold_status = merged["threshold_status"].iloc[0]
+                threshold_method = merged["threshold_method"].iloc[0]
+                q75 = merged["q75_score"].iloc[0]
+                q99 = merged["q99_score"].iloc[0]
+                out["threshold_value"] = threshold_value
+                out["threshold_status"] = threshold_status
+                out["threshold_method"] = threshold_method
+                out["q75_score"] = q75
+                out["q99_score"] = q99
+                scores_for_weight = pd.to_numeric(out["aucell_score"], errors="coerce")
+                if threshold_status == "hard_callable" and pd.notna(threshold_value):
+                    denom = q99 - threshold_value if pd.notna(q99) and pd.notna(threshold_value) else np.nan
+                    method = "aucell_threshold_to_q99"
+                    baseline = threshold_value
+                else:
+                    denom = q99 - q75 if pd.notna(q99) and pd.notna(q75) else np.nan
+                    method = "aucell_q75_to_q99_continuous_only"
+                    baseline = q75
+                if pd.notna(denom) and denom > 0 and pd.notna(baseline):
+                    out["state_activity_weight"] = ((scores_for_weight - baseline) / denom).clip(0, 1).fillna(0.0).to_numpy()
+                else:
+                    out["state_activity_weight"] = 0.0
+                out["soft_weight_method"] = method
+            else:
+                out["state_activity_weight"] = 0.0
+                out["soft_weight_method"] = "missing_threshold_metadata"
+        else:
+            out["state_activity_weight"] = group["ucell_score"].to_numpy()
+            out["soft_weight_method"] = "raw_ucell_qc_score"
         out["marker_coverage_fraction"] = group["marker_coverage_fraction"].iloc[0]
         out["n_markers_present"] = group["n_markers_present"].iloc[0]
         out["n_markers_total"] = group["n_markers_requested"].iloc[0]
@@ -541,6 +676,7 @@ def build_ucell_scores_output(bio_scores: pd.DataFrame, qc_scores: pd.DataFrame)
             "state_type",
             "state_name",
             "ucell_score",
+            "aucell_score",
             "n_markers_present",
             "n_markers_total",
             "marker_coverage_fraction",
@@ -560,6 +696,7 @@ def build_ucell_scores_output(bio_scores: pd.DataFrame, qc_scores: pd.DataFrame)
             "state_type",
             "state_name",
             "ucell_score",
+            "aucell_score",
             "n_markers_present",
             "n_markers_total",
             "marker_coverage_fraction",
@@ -584,34 +721,36 @@ def confidence_from_margin(margin: float, exploratory: bool = False) -> str:
 
 def hard_assignments_from_activity(
     activity: pd.DataFrame,
-    state_thresholds: dict[str, float],
     qc_thresholds: dict[str, float],
     args: argparse.Namespace,
 ) -> pd.DataFrame:
     frame = activity.copy()
-    state_threshold = frame["state_name"].map(state_thresholds)
     qc_threshold = frame["state_name"].map(qc_thresholds)
     frame["threshold"] = np.where(
         frame["state_type"].eq("qc"),
         qc_threshold.fillna(args.default_qc_threshold),
-        state_threshold.fillna(args.default_state_threshold),
+        frame["threshold_value"],
     )
     frame["threshold_source"] = np.where(
         frame["state_type"].eq("qc"),
         np.where(qc_threshold.notna(), "yaml", "default_qc"),
-        np.where(state_threshold.notna(), "yaml", "default_biological"),
+        frame["threshold_method"],
     )
     frame["marker_coverage_pass"] = (frame["n_markers_present"] >= args.min_markers_present) & (
         frame["marker_coverage_fraction"] >= args.min_marker_coverage
     )
-    frame["hard_call"] = frame["marker_coverage_pass"] & (frame["state_activity"] >= frame["threshold"])
+    callable_or_qc = frame["state_type"].eq("qc") | frame["threshold_status"].eq("hard_callable")
+    score_for_call = np.where(frame["state_type"].eq("qc"), frame["state_activity_weight"], frame["aucell_score"])
+    frame["hard_call"] = frame["marker_coverage_pass"] & callable_or_qc & (score_for_call >= frame["threshold"])
     frame["reason"] = np.select(
         [
             ~frame["marker_coverage_pass"],
+            ~callable_or_qc,
             frame["hard_call"],
         ],
         [
             "insufficient_marker_coverage",
+            "continuous_only_no_hard_threshold",
             "activity_above_threshold",
         ],
         default="activity_below_threshold",
@@ -621,7 +760,9 @@ def hard_assignments_from_activity(
             "cell_id",
             "state_type",
             "state_name",
-            "state_activity",
+            "aucell_score",
+            "ucell_score",
+            "state_activity_weight",
             "threshold",
             "hard_call",
             "threshold_source",
@@ -638,22 +779,22 @@ def qc_exclusions(activity: pd.DataFrame, args: argparse.Namespace) -> pd.DataFr
         cells["excluded"] = False
         cells["exclusion_reason"] = "qc_exclusion_not_requested"
         cells["triggering_qc_states"] = "none"
-        cells["max_qc_activity"] = cells["cell_id"].map(qc.groupby("cell_id")["state_activity"].max()).fillna(0.0)
+        cells["max_qc_activity"] = cells["cell_id"].map(qc.groupby("cell_id")["state_activity_weight"].max()).fillna(0.0)
         return cells
     selected = set(args.exclude_qc_states.split(",")) if args.exclude_qc_states else set(qc["state_name"].unique())
     qc = qc.loc[qc["state_name"].isin(selected)].copy()
-    triggers = qc.loc[qc["state_activity"] >= args.exclude_qc_above]
+    triggers = qc.loc[qc["state_activity_weight"] >= args.exclude_qc_above]
     grouped = triggers.groupby("cell_id")["state_name"].agg(lambda x: ";".join(sorted(set(x))))
     cells["triggering_qc_states"] = cells["cell_id"].map(grouped).fillna("none")
     cells["excluded"] = cells["triggering_qc_states"].ne("none")
     cells["exclusion_reason"] = np.where(cells["excluded"], "qc_activity_above_threshold", "not_excluded")
-    cells["max_qc_activity"] = cells["cell_id"].map(qc.groupby("cell_id")["state_activity"].max()).fillna(0.0)
+    cells["max_qc_activity"] = cells["cell_id"].map(qc.groupby("cell_id")["state_activity_weight"].max()).fillna(0.0)
     return cells
 
 
 def state_activity_lookup(activity: pd.DataFrame) -> dict[tuple[str, str], float]:
     bio = activity.loc[activity["state_type"] == "biological"]
-    return {(row.cell_id, row.state_name): float(row.state_activity) for row in bio.itertuples(index=False)}
+    return {(row.cell_id, row.state_name): float(row.state_activity_weight) for row in bio.itertuples(index=False)}
 
 
 def loo_activity_for_gene(
@@ -661,8 +802,12 @@ def loo_activity_for_gene(
     state_name: str,
     gene_set: GeneSet,
     matrix: pd.DataFrame,
-    ranks: pd.DataFrame,
+    aucell_ranks: pd.DataFrame,
     args: argparse.Namespace,
+    threshold_status: str,
+    threshold_value: float,
+    q75: float,
+    q99: float,
 ) -> pd.Series | None:
     if gene not in gene_set.genes:
         return None
@@ -670,8 +815,15 @@ def loo_activity_for_gene(
     present = [g for g in loo_genes if g in matrix.columns]
     if not present:
         return pd.Series(0.0, index=matrix.index)
-    score = ucell_score_from_ranks(ranks, present, args.max_rank)
-    return score.clip(0, 1)
+    score = aucell_score_from_ranks(aucell_ranks, present, args.aucell_max_rank)
+    if threshold_status == "hard_callable" and pd.notna(threshold_value):
+        baseline = threshold_value
+    else:
+        baseline = q75
+    denom = q99 - baseline if pd.notna(q99) and pd.notna(baseline) else np.nan
+    if pd.isna(denom) or denom <= 0:
+        return pd.Series(0.0, index=matrix.index)
+    return ((score - baseline) / denom).clip(0, 1).fillna(0.0)
 
 
 EXPECTED_EXPRESSION_COLUMNS = [
@@ -692,7 +844,7 @@ def expected_expression_summary(
     matrix: pd.DataFrame,
     activity: pd.DataFrame,
     biological_sets: dict[str, GeneSet],
-    ranks: pd.DataFrame,
+    aucell_ranks: pd.DataFrame,
     args: argparse.Namespace,
     query_genes: list[str],
 ) -> pd.DataFrame:
@@ -702,12 +854,16 @@ def expected_expression_summary(
     all_mean = matrix[query_genes].mean(axis=0)
     bio_activity = activity.loc[activity["state_type"] == "biological"].copy()
     for state_name, group in bio_activity.groupby("state_name", sort=False):
-        weights = group.set_index("cell_id")["state_activity"].reindex(matrix.index).fillna(0.0)
+        weights = group.set_index("cell_id")["state_activity_weight"].reindex(matrix.index).fillna(0.0)
+        threshold_status = group["threshold_status"].iloc[0]
+        threshold_value = group["threshold_value"].iloc[0]
+        q75 = group["q75_score"].iloc[0]
+        q99 = group["q99_score"].iloc[0]
         for gene in query_genes:
             used_loo = False
             gene_weights = weights
             if args.leave_one_gene_out and state_name in biological_sets:
-                loo = loo_activity_for_gene(gene, state_name, biological_sets[state_name], matrix, ranks, args)
+                loo = loo_activity_for_gene(gene, state_name, biological_sets[state_name], matrix, aucell_ranks, args, threshold_status, threshold_value, q75, q99)
                 if loo is not None:
                     gene_weights = loo.reindex(matrix.index).fillna(0.0)
                     used_loo = True
@@ -864,7 +1020,7 @@ def de_summaries(
     hard_rows = []
     bio_activity = activity.loc[activity["state_type"] == "biological"]
     for state_name, group in bio_activity.groupby("state_name", sort=False):
-        weights = group.set_index("cell_id")["state_activity"].reindex(matrix.index).fillna(0.0)
+        weights = group.set_index("cell_id")["state_activity_weight"].reindex(matrix.index).fillna(0.0)
         if expected_requested:
             donor_expr = donor_weighted_expression(matrix, metadata, weights, args.donor_col, query_genes).set_index("donor_id")
             design = donor_design.reindex(donor_expr.index)
@@ -944,13 +1100,13 @@ def call_states(scores: pd.DataFrame, thresholds: pd.DataFrame, bad_flags: pd.Da
         elif row["threshold_status"] == "insufficient_cells":
             call = "not_called_insufficient_cells"
             reason = "calibration_group_below_min_cells"
-        elif row["threshold_status"] == "low_dynamic_range":
-            call = "not_called_low_dynamic_range"
-            reason = "score_iqr_below_minimum"
+        elif row["threshold_status"] == "continuous_only":
+            call = "continuous_only"
+            reason = "no_supported_aucell_hard_threshold"
         elif pd.isna(row["threshold_value"]):
             call = "not_called_missing_threshold"
             reason = "missing_threshold"
-        elif row["ucell_score"] >= row["threshold_value"]:
+        elif row["aucell_score"] >= row["threshold_value"]:
             if bool(row["hard_exclusion_flag"]):
                 call = "ambiguous_qc_flagged"
                 reason = "score_high_but_hard_exclusion_qc_flag"
@@ -963,7 +1119,7 @@ def call_states(scores: pd.DataFrame, thresholds: pd.DataFrame, bad_flags: pd.Da
         else:
             call = "inactive"
             reason = "score_below_threshold"
-        margin = row["ucell_score"] - row["threshold_value"] if not pd.isna(row["threshold_value"]) else np.nan
+        margin = row["aucell_score"] - row["threshold_value"] if not pd.isna(row["threshold_value"]) else np.nan
         calls.append(
             {
                 "cell_id": row["cell_id"],
@@ -972,6 +1128,7 @@ def call_states(scores: pd.DataFrame, thresholds: pd.DataFrame, bad_flags: pd.Da
                 "annotated_cell_type": row["annotated_cell_type"],
                 "state_name": row["state_name"],
                 "ucell_score": row["ucell_score"],
+                "aucell_score": row["aucell_score"],
                 "threshold_value": row["threshold_value"],
                 "call": call,
                 "confidence": confidence_from_margin(margin, call == "exploratory_marker_high"),
@@ -1057,7 +1214,8 @@ def acceptance_checks(summary: pd.DataFrame, scores: pd.DataFrame, qc_scores: pd
     if not {"hard_exclusion_flag", "review_flag"}.issubset(set(calls.columns)):
         failures.append("Hard-exclusion and review flags are not both present in calls")
     composite = calls.loc[calls["requires_composite_validation"]]
-    if not composite.empty and not composite["call"].eq("exploratory_marker_high").all():
+    composite_called = composite.loc[composite["call"].isin(["active", "ambiguous_qc_flagged"])]
+    if not composite_called.empty:
         failures.append("Composite states without rules were not labeled exploratory marker-high")
     return failures
 
@@ -1070,13 +1228,15 @@ def write_methods(out_dir: Path, args: argparse.Namespace, mapping_info: dict[st
         "- UCell implementation: `local_ucell_style_rank_statistic`",
         "- UCell package version: `not_used`",
         f"- UCell parameters: `maxRank={args.max_rank}`, `ties.method=average`, `chunk.size=not_applicable_python_runner`, `missing_genes=skip`, `knn_smoothing=none`",
+        "- AUCell implementation: `local_aucell_style_rank_statistic`",
+        f"- AUCell parameters: `aucMaxRank={args.aucell_max_rank}`, `ties.method=average`, threshold exploration bins `{args.aucell_threshold_bins}`",
         f"- Biological GMT: `{args.biological_gmt}`",
         f"- Auxiliary bad-cell QC GMT: `{args.qc_gmt}`",
         f"- Gene ID handling: `{mapping_info['gene_id_type']}`",
         f"- Duplicate collapse method: `{mapping_info['duplicate_collapse_method']}`",
         f"- Marker coverage rules: score with at least 1 marker present; confident calls require `n_markers_present >= {args.min_markers_present}` and `marker_coverage_fraction >= {args.min_marker_coverage}`",
-        f"- Activity method: raw UCell score; no probability or matched-null calibration is applied",
-        f"- Thresholding method: direct UCell score threshold; default biological threshold `{args.default_state_threshold}`, default QC threshold `{args.default_qc_threshold}`",
+        "- Activity method: AUCell threshold-to-q99 state-excess weights for hard-callable biological states; AUCell q75-to-q99 weights for continuous-only biological states",
+        f"- Thresholding method: AUCell minimum-density threshold exploration with YAML overrides; default QC threshold `{args.default_qc_threshold}`",
         f"- Threshold eligibility group: `map_id + tissue + annotated_cell_type + state_name`; minimum cells `{args.min_calibration_cells}`; minimum score IQR `{args.min_score_iqr}`",
         f"- Summary query genes: `{args.query_genes or args.query_gene or 'all_expression_matrix_genes'}`",
         f"- Summary mode: `{args.mode}`",
@@ -1120,9 +1280,13 @@ def main() -> None:
     parser.add_argument("--sample-col", default="sample_id")
     parser.add_argument("--doublet-col", default="")
     parser.add_argument("--max-rank", type=int, default=1500)
+    parser.add_argument("--aucell-max-rank", type=int, default=0, help="Top-ranked genes used for AUCell-style scoring; default 5%% of genes")
+    parser.add_argument("--aucell-threshold-bins", type=int, default=64)
+    parser.add_argument("--aucell-threshold-smoothing", type=float, default=1.0)
+    parser.add_argument("--aucell-min-active-fraction", type=float, default=0.01)
+    parser.add_argument("--aucell-max-active-fraction", type=float, default=0.80)
     parser.add_argument("--min-markers-present", type=int, default=5)
     parser.add_argument("--min-marker-coverage", type=float, default=0.5)
-    parser.add_argument("--default-state-threshold", type=float, default=0.80)
     parser.add_argument("--default-qc-threshold", type=float, default=0.95)
     parser.add_argument("--leave-one-gene-out", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--query-genes", default="", help="Optional newline-delimited gene list restricting expression and DE summaries")
@@ -1181,23 +1345,26 @@ def main() -> None:
     metadata = metadata.drop_duplicates("cell_id").copy()
     expression, mapping_info = harmonize_expression(read_expression_input(args.expression), args.expression_kind, args.gene_map, args.duplicate_collapse)
     matrix = expression_matrix(expression, metadata["cell_id"])
+    if args.aucell_max_rank <= 0:
+        args.aucell_max_rank = max(1, int(np.ceil(matrix.shape[1] * 0.05)))
     query_genes = resolve_query_genes(args, matrix)
-    ranks = rank_matrix_for_ucell(matrix, args.max_rank)
+    ucell_ranks = rank_matrix_for_ucell(matrix, args.max_rank)
+    aucell_ranks = rank_matrix_for_aucell(matrix)
 
     biological_sets = read_gmt(args.biological_gmt)
     qc_sets = read_gmt(args.qc_gmt)
-    biological_scores = score_biological_states(matrix, ranks, metadata, biological_sets, args)
-    qc_scores = score_qc_signatures(matrix, ranks, metadata, qc_sets, args)
-    thresholds = calibrate_thresholds(biological_scores, args)
-    bad_flags = qc_metrics(matrix, metadata, qc_scores, args)
-    bio_activity = compute_activity(biological_scores, "state_name", "biological")
-    qc_activity = compute_activity(qc_scores, "qc_signature_name", "qc")
-    activity = pd.concat([bio_activity, qc_activity], ignore_index=True)
+    biological_scores = score_biological_states(matrix, ucell_ranks, aucell_ranks, metadata, biological_sets, args)
+    qc_scores = score_qc_signatures(matrix, ucell_ranks, aucell_ranks, metadata, qc_sets, args)
     state_thresholds = load_threshold_yaml(args.state_thresholds_yaml)
     qc_thresholds = load_threshold_yaml(args.qc_thresholds_yaml)
-    hard = hard_assignments_from_activity(activity, state_thresholds, qc_thresholds, args)
+    thresholds = calibrate_thresholds(biological_scores, args, state_thresholds)
+    bad_flags = qc_metrics(matrix, metadata, qc_scores, args)
+    bio_activity = compute_activity(biological_scores, "state_name", "biological", thresholds)
+    qc_activity = compute_activity(qc_scores, "qc_signature_name", "qc")
+    activity = pd.concat([bio_activity, qc_activity], ignore_index=True)
+    hard = hard_assignments_from_activity(activity, qc_thresholds, args)
     exclusions = qc_exclusions(activity, args)
-    expression_expected = expected_expression_summary(matrix, activity, {s.name: s for s in biological_sets}, ranks, args, query_genes)
+    expression_expected = expected_expression_summary(matrix, activity, {s.name: s for s in biological_sets}, aucell_ranks, args, query_genes)
     expression_hard = hard_expression_summary(matrix, hard, args, query_genes)
     phenotypes = read_table(args.phenotypes) if args.phenotypes else None
     de_expected, de_hard = de_summaries(matrix, metadata, activity, hard, phenotypes, args, query_genes)
@@ -1208,7 +1375,8 @@ def main() -> None:
     state_summary = activity.groupby(["state_type", "state_name"], sort=False).agg(
         n_cells_scored=("cell_id", "nunique"),
         mean_ucell_score=("ucell_score", "mean"),
-        mean_activity=("state_activity", "mean"),
+        mean_aucell_score=("aucell_score", "mean"),
+        mean_activity_weight=("state_activity_weight", "mean"),
         marker_coverage_fraction=("marker_coverage_fraction", "first"),
     ).reset_index()
     hard_counts = hard.groupby(["state_type", "state_name"], sort=False).agg(
@@ -1221,14 +1389,14 @@ def main() -> None:
 
     ucell_scores = build_ucell_scores_output(biological_scores, qc_scores)
     write_table(ucell_scores, output_path(args, "ucell_scores_out", "ucell_scores.tsv.gz"))
-    write_table(activity[["cell_id", "state_type", "state_name", "ucell_score", "state_activity", "activity_method", "marker_coverage_fraction"]], output_path(args, "cell_state_activity_out", "cell_state_activity.tsv.gz"))
+    write_table(activity[["cell_id", "state_type", "state_name", "ucell_score", "aucell_score", "state_activity_weight", "soft_weight_method", "threshold_value", "threshold_status", "threshold_method", "q75_score", "q99_score", "marker_coverage_fraction"]], output_path(args, "cell_state_activity_out", "cell_state_activity.tsv.gz"))
     write_table(hard, output_path(args, "cell_state_hard_assignments_out", "cell_state_hard_assignments.tsv.gz"))
     write_table(exclusions, output_path(args, "qc_exclusions_out", "qc_exclusions.tsv.gz"))
     write_table(expression_expected, output_path(args, "expression_expected_assignments_out", "expression_expected_assignments.tsv.gz"))
     write_table(expression_hard, output_path(args, "expression_hard_assignments_out", "expression_hard_assignments.tsv.gz"))
     write_table(de_expected, output_path(args, "de_expected_assignments_out", "de_expected_assignments.tsv.gz"))
     write_table(de_hard, output_path(args, "de_hard_assignments_out", "de_hard_assignments.tsv.gz"))
-    write_table(state_summary[["state_type", "state_name", "n_cells_scored", "mean_ucell_score", "mean_activity", "n_hard_assigned", "hard_assigned_fraction", "marker_coverage_fraction", "threshold"]], output_path(args, "state_summary_out", "state_summary.tsv.gz"))
+    write_table(state_summary[["state_type", "state_name", "n_cells_scored", "mean_ucell_score", "mean_aucell_score", "mean_activity_weight", "n_hard_assigned", "hard_assigned_fraction", "marker_coverage_fraction", "threshold"]], output_path(args, "state_summary_out", "state_summary.tsv.gz"))
     write_table(biological_scores.drop(columns=["scope_tissue", "scope_cell_type", "state_kind", "is_composite_state"]), out_dir / "cell_state_scores.tsv.gz")
     write_table(thresholds, out_dir / "cell_state_thresholds.tsv.gz")
     write_table(calls.drop(columns=["state_kind"]), out_dir / "cell_state_calls.tsv.gz")
@@ -1249,10 +1417,10 @@ def main() -> None:
         "parameters": {
             "mode": args.mode,
             "max_rank": args.max_rank,
+            "aucell_max_rank": args.aucell_max_rank,
             "query_genes": args.query_genes or None,
             "query_gene": args.query_gene or None,
             "n_query_genes": len(query_genes),
-            "default_state_threshold": args.default_state_threshold,
             "default_qc_threshold": args.default_qc_threshold,
             "leave_one_gene_out": args.leave_one_gene_out,
             "exclude_qc_above": args.exclude_qc_above,
