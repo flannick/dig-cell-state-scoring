@@ -10,6 +10,8 @@ import tempfile
 from pathlib import Path
 
 import pandas as pd
+from scipy import sparse
+from scipy.io import mmwrite
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -312,6 +314,8 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
     query_genes_path = tmpdir / "query_genes.txt"
     out_dir = tmpdir / "runner_out"
     out_dir_excluded = tmpdir / "runner_out_excluded"
+    rank_dir = tmpdir / "rank_10x"
+    rank_dir.mkdir()
     metadata.to_csv(metadata_path, sep="\t", index=False)
     expression.to_csv(expression_path, sep="\t", index=False)
     gene_map.to_csv(gene_map_path, sep="\t", index=False)
@@ -319,6 +323,19 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
     qc_path.write_text(qc_gmt + "\n", encoding="utf-8")
     state_thresholds_path.write_text("pancreas_beta_cell_state_a: 0.25\n", encoding="utf-8")
     query_genes_path.write_text("G1\nG3\nMISSING_GENE\n", encoding="utf-8")
+    rank_genes = ["G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8", "MT-CO1", "MT-CO2", "RPLP0"]
+    rank_cells = [f"c{i}" for i in range(1, 7)]
+    rank_values = [
+        [10, 9, 1, 1, 8, 7, 6, 1, 20, 0, 0],
+        [9, 8, 1, 1, 7, 6, 5, 1, 0, 0, 0],
+        [1, 1, 9, 8, 5, 4, 1, 6, 0, 0, 0],
+        [1, 1, 8, 7, 4, 3, 1, 5, 0, 0, 0],
+        [2, 2, 1, 1, 5, 5, 4, 1, 0, 0, 0],
+        [1, 1, 9, 8, 3, 3, 1, 5, 0, 0, 0],
+    ]
+    mmwrite(rank_dir / "matrix.mtx", sparse.csr_matrix(rank_values).T)
+    (rank_dir / "features.tsv").write_text("\n".join(f"{g}\t{g}" for g in rank_genes) + "\n", encoding="utf-8")
+    (rank_dir / "barcodes.tsv").write_text("\n".join(rank_cells) + "\n", encoding="utf-8")
 
     run_cmd(
         [
@@ -338,6 +355,8 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
             str(state_thresholds_path),
             "--out-dir",
             str(out_dir),
+            "--rank-10x-dir",
+            str(rank_dir),
             "--query-genes",
             str(query_genes_path),
             "--min-calibration-cells",
@@ -365,6 +384,7 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
     expected.update(
         {
             "ucell_scores.tsv.gz",
+            "aucell_state_activity.tsv.gz",
             "cell_state_activity.tsv.gz",
             "cell_state_hard_assignments.tsv.gz",
             "qc_exclusions.tsv.gz",
@@ -381,12 +401,25 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
     assert {"markers_present", "markers_missing", "marker_coverage_fraction"}.issubset(scores.columns)
     assert scores["ucell_score"].notna().all()
     assert scores["aucell_score"].notna().all()
+    assert scores.loc[scores["state_name"] == "pancreas_beta_cell_state_a", "markers_present"].str.contains("G7").all()
+    thresholds = pd.read_csv(out_dir / "cell_state_thresholds.tsv.gz", sep="\t")
+    assert {"q90_score_diagnostic", "q95_score_diagnostic"}.issubset(thresholds.columns)
     activity = pd.read_csv(out_dir / "cell_state_activity.tsv.gz", sep="\t")
     assert activity["state_activity_weight"].dropna().between(0, 1).all()
     assert {"aucell_score", "ucell_score", "soft_weight_method", "threshold_status"}.issubset(activity.columns)
+    assert {"q90_score_diagnostic", "q95_score_diagnostic"}.issubset(activity.columns)
     assert not activity["state_activity_weight"].equals(activity["ucell_score"])
     assert (activity.loc[activity["state_name"] == "pancreas_beta_cell_state_a", "threshold_status"] == "hard_callable").all()
     assert (activity.loc[activity["state_name"].str.contains("dedifferentiation"), "threshold_status"] == "continuous_only").all()
+    aucell_activity = pd.read_csv(out_dir / "aucell_state_activity.tsv.gz", sep="\t")
+    assert list(aucell_activity.columns) == [
+        "cell_id",
+        "state_name",
+        "aucell_score",
+        "threshold_status",
+        "hard_call",
+        "state_activity_weight",
+    ]
     hard_assignments = pd.read_csv(out_dir / "cell_state_hard_assignments.tsv.gz", sep="\t")
     assert {"hard_call", "threshold", "marker_coverage_pass"}.issubset(hard_assignments.columns)
     state_a = hard_assignments.loc[hard_assignments["state_name"] == "pancreas_beta_cell_state_a"]
@@ -426,6 +459,8 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
             str(gene_map_path),
             "--out-dir",
             str(out_dir_excluded),
+            "--rank-10x-dir",
+            str(rank_dir),
             "--min-calibration-cells",
             "2",
             "--min-markers-present",

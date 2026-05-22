@@ -165,7 +165,8 @@ integrated embeddings, PCA coordinates, or other latent spaces as scoring input.
 
 ```bash
 ../.venv/bin/python cell_state_de/scripts/run_cmdkp_state_scoring.py \
-  --expression-matrix results/cell_state_de/example_expression_long.tsv.gz \
+  --rank-10x-dir results/cell_state_de/full_rank_universe_10x \
+  --expression-matrix results/cell_state_de/hit_gene_expression_long.tsv.gz \
   --cell-metadata results/cell_state_de/example_metadata.tsv.gz \
   --states-gmt out/pancreas/pancreas_cell_state_markers.gmt \
   --qc-states-gmt out/qc/cmdkp_all_tissues_minimal_bad_cell_qc_signatures.gmt \
@@ -191,6 +192,7 @@ where the mapping table contains `gene_id` and `gene_symbol` columns.
 The runner writes:
 
 - `ucell_scores.tsv.gz`
+- `aucell_state_activity.tsv.gz`
 - `cell_state_activity.tsv.gz`
 - `cell_state_hard_assignments.tsv.gz`
 - `qc_exclusions.tsv.gz`
@@ -211,6 +213,19 @@ The runner writes:
 
 ### Interpreting scores, activity, and hard calls
 
+Use separate inputs for scoring and expression summaries:
+
+- AUCell/UCell state scoring should use a full sparse rank universe supplied
+  with `--rank-10x-dir` or `--rank-matrix-mtx --rank-genes --rank-cells`.
+- Expression and DE summaries should use a small hit-gene expression matrix
+  supplied with `--expression-matrix`.
+- Do not export the full cell x gene matrix as long-form text for scoring, and
+  do not use the small hit-gene matrix as the AUCell rank universe for
+  collaborator-facing runs.
+- Sparse rank-universe scoring is performed directly from the Matrix Market/10x
+  matrix and scores all signatures in a GMT pass from one per-cell sparse rank
+  ordering. The broad matrix is not dense-pivoted in pandas.
+
 The runner computes two local rank-based scores:
 
 ```text
@@ -221,6 +236,10 @@ a_is = AUCell(x_i, G_s)
 where `x_i` is the expression vector for cell `i` and `G_s` is the marker set
 for state `s`. UCell is retained as a scalable signature score. AUCell is used
 for collaborator-facing hard state calls and soft state-excess weights.
+
+The minimal AUCell state activity interface is
+`aucell_state_activity.tsv.gz`, with `cell_id`, `state_name`, `aucell_score`,
+`threshold_status`, `hard_call`, and `state_activity_weight`.
 
 For each biological state, the runner explores the AUCell score distribution
 within each `map_id + tissue + annotated_cell_type + state_name` group. A hard
@@ -241,13 +260,17 @@ For continuous-only states, soft weights use the high tail:
 w_is = clip((a_is - Q75_s) / (Q99_s - Q75_s), 0, 1)
 ```
 
+`Q90_s` and `Q95_s` are reported only as score-distribution diagnostics. They
+are not used as default hard-call thresholds because that would force fixed
+fractions of cells into each state.
+
 Weights are normalized within state across cells, not across states within a
 cell. They do not sum to one and are not probabilities.
 
 Expression and DE summaries use all expression-matrix genes by default. To
 restrict those summaries to a query set, pass a newline-delimited list with
 `--query-genes` or a comma-separated list with `--query-gene`. State scoring
-still uses the full expression matrix and full state/QC GMTs; the query gene
+uses the full sparse rank universe and full state/QC GMTs; the query gene
 options only restrict `expression_*` and `de_*` outputs. The
 `--mode expected|hard|both` option controls whether expected/activity-weighted
 summaries, hard-assignment summaries, or both are computed. Unrequested summary

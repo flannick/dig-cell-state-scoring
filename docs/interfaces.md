@@ -170,6 +170,15 @@ The simplified continuous workflow additionally writes AUCell/UCell scores,
 AUCell-based hard calls, state-excess soft weights, expression, DE, and
 run-summary outputs. These are the preferred downstream interfaces.
 
+The Python runner separates the broad scoring input from the expression-summary
+input. Use `--rank-10x-dir` or `--rank-matrix-mtx --rank-genes --rank-cells` for
+the full sparse rank universe used by AUCell/UCell scoring. Use
+`--expression-matrix` for the small hit-gene expression table used by expression
+and DE summaries. The full rank universe should not be exported as long-form
+text or dense-pivoted in pandas. Sparse rank-universe scoring is done directly
+from the Matrix Market/10x matrix and scores all signatures in a GMT pass from
+one per-cell sparse rank ordering.
+
 ### `ucell_scores.tsv.gz`
 
 Columns:
@@ -184,6 +193,18 @@ Columns:
 - `marker_coverage_fraction`
 - `markers_present`
 - `markers_missing`
+
+### `aucell_state_activity.tsv.gz`
+
+Minimal collaborator-facing AUCell state activity output. It contains only
+biological states:
+
+- `cell_id`
+- `state_name`
+- `aucell_score`
+- `threshold_status`
+- `hard_call`
+- `state_activity_weight`
 
 ### `cell_state_activity.tsv.gz`
 
@@ -200,6 +221,8 @@ Columns:
 - `threshold_status`
 - `threshold_method`
 - `q75_score`
+- `q90_score_diagnostic`
+- `q95_score_diagnostic`
 - `q99_score`
 - `marker_coverage_fraction`
 
@@ -210,6 +233,8 @@ Activity details:
   soft weights.
 - `state_activity_weight` is threshold-to-q99 scaled for hard-callable states
   and q75-to-q99 scaled for continuous-only states.
+- `q90_score_diagnostic` and `q95_score_diagnostic` are reported only as
+  distribution diagnostics and are not used as default hard-call thresholds.
 - Weights are independent across states and are not probabilities.
 
 Expression and DE summary interfaces:
@@ -302,6 +327,7 @@ One row per cell per relevant biological state:
 - `annotated_cell_type`
 - `state_name`
 - `ucell_score`
+- `aucell_score`
 - `score_percentile_within_calibration_group`
 - `n_markers_requested`
 - `n_markers_present`
@@ -324,6 +350,8 @@ One row per map/tissue/cell-type/state threshold eligibility group:
 - `score_iqr`
 - `q50_score`
 - `q75_score`
+- `q90_score_diagnostic`
+- `q95_score_diagnostic`
 - `q99_score`
 - `active_fraction_at_threshold`
 - `threshold_reason`
@@ -361,6 +389,7 @@ One row per cell per auxiliary QC signature:
 - `annotated_cell_type`
 - `qc_signature_name`
 - `ucell_score`
+- `aucell_score`
 - `score_percentile_within_sample`
 - `n_markers_present`
 - `marker_coverage_fraction`
