@@ -2,7 +2,7 @@
 
 Reusable scripts for assigning cells to marker-defined states and running donor-aware differential expression on single-cell maps.
 
-The toolkit is intentionally map-agnostic. PanKbase is the first target, but the interfaces are plain TSV plus JSON so the same scripts can be used after exporting selected genes and metadata from any Seurat or AnnData-style map.
+The toolkit is intentionally map-agnostic. The interfaces are plain TSV plus JSON so the same scripts can be used after exporting selected genes and metadata from any Seurat or AnnData-style map.
 
 ## Selected-Gene Workflow
 
@@ -12,7 +12,7 @@ Run these commands from the analysis project root, not from inside this director
 
 ```bash
 R_LIBS_USER=../.Rlib /opt/homebrew/bin/Rscript --vanilla cell_state_de/scripts/extract_selected_expression_from_seurat.R \
-  --rds data/external/pankbase/060425_scRNA_v3.3.rds \
+  --rds data/external/example_map/example.rds \
   --genes cell_state_de/configs/example_genes.txt \
   --metadata-out cell_state_de/results/metadata.tsv.gz \
   --expression-out cell_state_de/results/expression_long.tsv.gz \
@@ -57,17 +57,7 @@ See [docs/interfaces.md](docs/interfaces.md) for the exact schema.
 
 ## GMT State Workflow
 
-Use this workflow when state definitions come from a GMT marker file such as `../cell_states/out/pancreas/pancreas_cell_state_markers.gmt`.
-
-For PanKbase, first stage the Seurat RDS from the tarball and remove it after derived outputs are complete.
-
-```bash
-mkdir -p results/cell_state_de/pankbase_beta/tmp_rds
-tar -xzf data/external/pankbase/pankbase-scrna-umap-v3.3.tar.gz \
-  -C results/cell_state_de/pankbase_beta/tmp_rds \
-  --strip-components 1 \
-  pankbase-scrna-umap-v3.3/060425_scRNA_v3.3.rds
-```
+Use this workflow when state definitions come from a GMT marker file.
 
 1. Score cells for marker-defined states. The production default is local UCell-style
    rank scoring. The script can also write calibrated matched-random null
@@ -75,33 +65,33 @@ tar -xzf data/external/pankbase/pankbase-scrna-umap-v3.3.tar.gz \
 
 ```bash
 R_LIBS_USER=../.Rlib /opt/homebrew/bin/Rscript --vanilla cell_state_de/scripts/score_gmt_states_from_seurat.R \
-  --rds results/cell_state_de/pankbase_beta/tmp_rds/060425_scRNA_v3.3.rds \
-  --gmt ../cell_states/out/pancreas/pancreas_cell_state_markers.gmt \
-  --state-regex '^pancreas_beta_cell_' \
-  --cell-filter-col Cell_Type \
-  --cell-filter-values Beta \
-  --metadata-cols 'Cell_Type,center_donor_id,description_of_diabetes_status,treatments' \
+  --rds data/external/example_map/example.rds \
+  --gmt results/cell_state_de/example_cell_state_markers.gmt \
+  --state-regex '^tissue_a_cell_type_a_' \
+  --cell-filter-col cell_type \
+  --cell-filter-values 'Type A' \
+  --metadata-cols 'cell_type,donor_id,condition,treatment' \
   --score-method ucell \
-  --thresholds-out results/cell_state_de/pankbase_beta_state_thresholds.tsv.gz \
+  --thresholds-out results/cell_state_de/example_state_thresholds.tsv.gz \
   --null-n 500 \
   --null-percentile 0.99 \
   --null-max-cells 20000 \
-  --scores-out results/cell_state_de/pankbase_beta_state_scores.tsv.gz \
-  --wide-out results/cell_state_de/pankbase_beta_state_scores_wide.tsv.gz \
-  --metadata-out results/cell_state_de/pankbase_beta_state_metadata.tsv.gz
+  --scores-out results/cell_state_de/example_state_scores.tsv.gz \
+  --wide-out results/cell_state_de/example_state_scores_wide.tsv.gz \
+  --metadata-out results/cell_state_de/example_state_metadata.tsv.gz
 ```
 
 2. Call multi-label states from scores and calibrated thresholds.
 
 ```bash
 ../.venv/bin/python cell_state_de/scripts/call_states_from_scores.py \
-  --scores results/cell_state_de/pankbase_beta_state_scores.tsv.gz \
-  --thresholds results/cell_state_de/pankbase_beta_state_thresholds.tsv.gz \
-  --metadata results/cell_state_de/pankbase_beta_state_metadata.tsv.gz \
-  --parent-cell-type-col Cell_Type \
+  --scores results/cell_state_de/example_state_scores.tsv.gz \
+  --thresholds results/cell_state_de/example_state_thresholds.tsv.gz \
+  --metadata results/cell_state_de/example_state_metadata.tsv.gz \
+  --parent-cell-type-col cell_type \
   --rules cell_state_de/configs/example_state_call_rules.json \
-  --out results/cell_state_de/pankbase_beta_state_calls.tsv.gz \
-  --annotation-out results/cell_state_de/pankbase_beta_cell_annotations.tsv.gz
+  --out results/cell_state_de/example_state_calls.tsv.gz \
+  --annotation-out results/cell_state_de/example_cell_annotations.tsv.gz
 ```
 
 Legacy exploratory quantile assignment remains available, but should not be used
@@ -110,42 +100,41 @@ fraction of cells into every state.
 
 ```bash
 ../.venv/bin/python cell_state_de/scripts/assign_states_from_scores.py \
-  --scores results/cell_state_de/pankbase_beta_state_scores.tsv.gz \
-  --metadata results/cell_state_de/pankbase_beta_state_metadata.tsv.gz \
-  --cell-type-col Cell_Type \
+  --scores results/cell_state_de/example_state_scores.tsv.gz \
+  --metadata results/cell_state_de/example_state_metadata.tsv.gz \
+  --cell-type-col cell_type \
+  --state-cell-type-map results/cell_state_de/example_state_cell_type_map.tsv \
   --method quantile \
   --within cell_type \
   --quantile 0.75 \
-  --out results/cell_state_de/pankbase_beta_state_membership.tsv.gz
+  --out results/cell_state_de/example_state_membership.tsv.gz
 ```
 
 3. Run donor-pseudobulk differential expression from Seurat counts.
 
 ```bash
 R_LIBS_USER=../.Rlib /opt/homebrew/bin/Rscript --vanilla cell_state_de/scripts/pseudobulk_de_from_seurat.R \
-  --rds results/cell_state_de/pankbase_beta/tmp_rds/060425_scRNA_v3.3.rds \
-  --membership results/cell_state_de/pankbase_beta_state_calls.tsv.gz \
+  --rds data/external/example_map/example.rds \
+  --membership results/cell_state_de/example_state_calls.tsv.gz \
   --analysis-types cell_type,state,state_association \
-  --donor-col center_donor_id \
-  --group-col description_of_diabetes_status \
-  --cell-type-col Cell_Type \
-  --cell-filter-col Cell_Type \
-  --cell-filter-values Beta \
-  --treatment-col treatments \
-  --treatment-values no_treatment \
-  --case-values 'type 2 diabetes' \
-  --control-values non-diabetic \
-  --out results/cell_state_de/pankbase_beta_state_de.tsv.gz
+  --donor-col donor_id \
+  --group-col condition \
+  --cell-type-col cell_type \
+  --cell-filter-col cell_type \
+  --cell-filter-values 'Type A' \
+  --case-values case \
+  --control-values control \
+  --out results/cell_state_de/example_state_de.tsv.gz
 ```
 
 4. Assign genes to states from curated markers plus state association DE.
 
 ```bash
 ../.venv/bin/python cell_state_de/scripts/assign_genes_to_states.py \
-  --gmt ../cell_states/out/pancreas/pancreas_cell_state_markers.gmt \
-  --state-regex '^pancreas_beta_cell_' \
-  --state-association-de results/cell_state_de/pankbase_beta_state_de.tsv.gz \
-  --out results/cell_state_de/pankbase_beta_gene_state_assignments.tsv.gz
+  --gmt results/cell_state_de/example_cell_state_markers.gmt \
+  --state-regex '^tissue_a_cell_type_a_' \
+  --state-association-de results/cell_state_de/example_state_de.tsv.gz \
+  --out results/cell_state_de/example_gene_state_assignments.tsv.gz
 ```
 
 ## Dependencies
@@ -165,10 +154,10 @@ integrated embeddings, PCA coordinates, or other latent spaces as scoring input.
 
 ```bash
 ../.venv/bin/python cell_state_de/scripts/run_cmdkp_state_scoring.py \
-  --rank-10x-dir results/cell_state_de/full_rank_universe_10x \
-  --expression-matrix results/cell_state_de/hit_gene_expression_long.tsv.gz \
+  --rank-10x-dir results/cell_state_de/example_rank_universe_10x \
+  --expression-matrix results/cell_state_de/query_gene_expression_long.tsv.gz \
   --cell-metadata results/cell_state_de/example_metadata.tsv.gz \
-  --states-gmt out/pancreas/pancreas_cell_state_markers.gmt \
+  --states-gmt results/cell_state_de/example_cell_state_markers.gmt \
   --qc-states-gmt out/qc/cmdkp_all_tissues_minimal_bad_cell_qc_signatures.gmt \
   --out-dir results/cell_state_de/cmdkp_state_scoring \
   --expression-kind log1p_normalized \
@@ -217,11 +206,11 @@ Use separate inputs for scoring and expression summaries:
 
 - AUCell/UCell state scoring should use a full sparse rank universe supplied
   with `--rank-10x-dir` or `--rank-matrix-mtx --rank-genes --rank-cells`.
-- Expression and DE summaries should use a small hit-gene expression matrix
+- Expression and DE summaries should use a small query-gene expression matrix
   supplied with `--expression-matrix`.
 - Do not export the full cell x gene matrix as long-form text for scoring, and
-  do not use the small hit-gene matrix as the AUCell rank universe for
-  collaborator-facing runs.
+  do not use the small query-gene matrix as the AUCell rank universe for
+  production runs.
 - Sparse rank-universe scoring is performed directly from the Matrix Market/10x
   matrix and scores all signatures in a GMT pass from one per-cell sparse rank
   ordering. The broad matrix is not dense-pivoted in pandas.
@@ -235,7 +224,7 @@ a_is = AUCell(x_i, G_s)
 
 where `x_i` is the expression vector for cell `i` and `G_s` is the marker set
 for state `s`. UCell is retained as a scalable signature score. AUCell is used
-for collaborator-facing hard state calls and soft state-excess weights.
+for hard state calls and soft state-excess weights.
 
 The minimal AUCell state activity interface is
 `aucell_state_activity.tsv.gz`, with `cell_id`, `state_name`, `aucell_score`,

@@ -19,15 +19,6 @@ def as_bool(series: pd.Series) -> pd.Series:
     return series.astype(str).str.strip().str.lower().isin({"true", "t", "1", "yes", "y"})
 
 
-def infer_state_cell_type(state: str) -> str:
-    prefix = "pancreas_"
-    suffix = "_cell_"
-    if state.startswith(prefix) and suffix in state:
-        value = state[len(prefix) : state.index(suffix)]
-        return value.replace("_", " ").title()
-    return ""
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scores", required=True, help="Long score TSV/TSV.GZ with cell_id, state, score")
@@ -72,9 +63,7 @@ def main() -> None:
         if args.cell_type_col and not args.allow_cross_cell_type:
             frame = frame.loc[frame[args.cell_type_col].astype(str) == frame["cell_type"].astype(str)].copy()
     elif args.cell_type_col and not args.allow_cross_cell_type:
-        frame["cell_type"] = frame["state"].map(infer_state_cell_type)
-        inferred = frame["cell_type"].astype(str).str.len() > 0
-        frame = frame.loc[(~inferred) | (frame[args.cell_type_col].astype(str) == frame["cell_type"].astype(str))].copy()
+        print("Warning: no --state-cell-type-map supplied; state scores are not filtered by cell type")
 
     if frame.empty:
         raise SystemExit("No score rows remained after metadata and cell-type filtering")

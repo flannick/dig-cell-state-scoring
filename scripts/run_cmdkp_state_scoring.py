@@ -1224,17 +1224,17 @@ def fit_simple_lm(y: pd.Series, design: pd.DataFrame, phenotype: str) -> tuple[f
         coef_col = phenotype
     X = x.to_numpy(float)
     Y = frame["y"].to_numpy(float)
-    beta, _, _, _ = np.linalg.lstsq(X, Y, rcond=None)
-    resid = Y - X @ beta
+    coef, _, _, _ = np.linalg.lstsq(X, Y, rcond=None)
+    resid = Y - X @ coef
     dof = len(Y) - X.shape[1]
     if dof <= 0:
-        return beta[list(x.columns).index(coef_col)], np.nan, len(frame)
+        return coef[list(x.columns).index(coef_col)], np.nan, len(frame)
     sigma2 = float((resid @ resid) / dof)
     cov = sigma2 * np.linalg.pinv(X.T @ X)
     idx = list(x.columns).index(coef_col)
     se = float(np.sqrt(cov[idx, idx])) if cov[idx, idx] >= 0 else np.nan
-    p = 2 * stats.t.sf(abs(beta[idx] / se), dof) if se and np.isfinite(se) and se > 0 else np.nan
-    return float(beta[idx]), float(p), len(frame)
+    p = 2 * stats.t.sf(abs(coef[idx] / se), dof) if se and np.isfinite(se) and se > 0 else np.nan
+    return float(coef[idx]), float(p), len(frame)
 
 
 def de_summaries(

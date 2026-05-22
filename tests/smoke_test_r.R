@@ -33,7 +33,7 @@ colnames(counts) <- paste0("c", 1:8)
 obj <- CreateSeuratObject(counts = counts)
 obj$donor_id <- rep(c("d1", "d2", "d3", "d4"), each = 2)
 obj$disease_group <- rep(c("T2D", "T2D", "ND", "ND"), each = 2)
-obj$cell_type <- "Beta"
+obj$cell_type <- "Type A"
 obj$treatments <- "no_treatment"
 obj <- NormalizeData(obj, verbose = FALSE)
 
@@ -46,9 +46,9 @@ metadata <- file.path(tmp, "metadata.tsv.gz")
 de <- file.path(tmp, "de.tsv.gz")
 membership <- file.path(tmp, "membership.tsv")
 saveRDS(obj, rds)
-writeLines("pancreas_beta_cell_state_a\ttoy\tG1\tG2", gmt)
+writeLines("tissue_a_type_a_state_a\ttoy\tG1\tG2", gmt)
 write.table(
-  data.frame(cell_id = colnames(counts), state = "pancreas_beta_cell_state_a", in_state = TRUE),
+  data.frame(cell_id = colnames(counts), state = "tissue_a_type_a_state_a", in_state = TRUE),
   membership,
   sep = "\t",
   row.names = FALSE,
@@ -71,7 +71,7 @@ score_status <- system2(
     "--null-max-cells", "4",
     "--random-seed", "1",
     "--metadata-out", metadata,
-    "--state-regex", "^pancreas_beta_cell_"
+    "--state-regex", "^tissue_a_type_a_"
   ),
   stdout = TRUE,
   stderr = TRUE

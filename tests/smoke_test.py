@@ -26,7 +26,7 @@ def test_assign_states(tmpdir: Path) -> None:
         {
             "cell_id": ["c1", "c2", "c3", "c4"],
             "donor_id": ["d1", "d1", "d2", "d2"],
-            "cell_type": ["beta", "alpha", "beta", "alpha"],
+            "cell_type": ["type_a", "type_b", "type_a", "type_b"],
         }
     )
     expression = pd.DataFrame(
@@ -49,10 +49,10 @@ def test_assign_states(tmpdir: Path) -> None:
                 "within": "all",
             },
             {
-                "name": "beta_metadata",
+                "name": "type_a_metadata",
                 "type": "metadata_equals",
                 "column": "cell_type",
-                "value": "beta",
+                "value": "type_a",
             },
         ],
     }
@@ -88,9 +88,9 @@ def test_assign_states(tmpdir: Path) -> None:
     assert bool(high.loc["c1", "in_state"])
     assert not bool(high.loc["c2", "in_state"])
 
-    beta = states.loc[states["state"] == "beta_metadata"].set_index("cell_id")
-    assert bool(beta.loc["c1", "in_state"])
-    assert not bool(beta.loc["c2", "in_state"])
+    type_a = states.loc[states["state"] == "type_a_metadata"].set_index("cell_id")
+    assert bool(type_a.loc["c1", "in_state"])
+    assert not bool(type_a.loc["c2", "in_state"])
 
 
 def test_donor_pseudobulk_de(tmpdir: Path) -> None:
@@ -158,21 +158,24 @@ def test_assign_states_from_scores(tmpdir: Path) -> None:
     metadata = pd.DataFrame(
         {
             "cell_id": ["c1", "c2", "c3", "c4"],
-            "Cell Type": ["Beta", "Beta", "Alpha", "Alpha"],
+            "Cell Type": ["Type A", "Type A", "Type B", "Type B"],
         }
     )
     scores = pd.DataFrame(
         {
             "cell_id": ["c1", "c2", "c3", "c4"],
-            "state": ["pancreas_beta_cell_er_stress_upr"] * 4,
+            "state": ["tissue_a_type_a_process_state"] * 4,
             "score": [10.0, 1.0, 100.0, 100.0],
         }
     )
+    state_map = pd.DataFrame({"state": ["tissue_a_type_a_process_state"], "cell_type": ["Type A"]})
     metadata_path = tmpdir / "score_metadata.tsv"
     scores_path = tmpdir / "scores.tsv"
+    state_map_path = tmpdir / "state_cell_type_map.tsv"
     out_path = tmpdir / "score_membership.tsv"
     metadata.to_csv(metadata_path, sep="\t", index=False)
     scores.to_csv(scores_path, sep="\t", index=False)
+    state_map.to_csv(state_map_path, sep="\t", index=False)
     run_cmd(
         [
             sys.executable,
@@ -185,6 +188,8 @@ def test_assign_states_from_scores(tmpdir: Path) -> None:
             "cell_id",
             "--cell-type-col",
             "Cell Type",
+            "--state-cell-type-map",
+            str(state_map_path),
             "--quantile",
             "0.5",
             "--out",
@@ -215,7 +220,7 @@ def test_call_states_from_scores(tmpdir: Path) -> None:
             "threshold_method": ["matched_random_gene_set_null99"] * 3,
         }
     )
-    metadata = pd.DataFrame({"cell_id": ["c1", "c2"], "cell_type": ["Beta", "Beta"]})
+    metadata = pd.DataFrame({"cell_id": ["c1", "c2"], "cell_type": ["Type A", "Type A"]})
     rules = {
         "states": [
             {"state": "state_a", "kind": "biological"},
@@ -274,8 +279,8 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
         {
             "cell_id": [f"c{i}" for i in range(1, 7)],
             "map_id": ["map1"] * 6,
-            "tissue": ["pancreas"] * 6,
-            "annotated_cell_type": ["beta_cell"] * 6,
+            "tissue": ["tissue_a"] * 6,
+            "annotated_cell_type": ["cell_type_a"] * 6,
             "donor_id": ["d1", "d1", "d2", "d2", "d3", "d3"],
             "sample_id": ["s1", "s1", "s2", "s2", "s3", "s3"],
         }
@@ -295,8 +300,8 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
     )
     bio_gmt = "\n".join(
         [
-            "pancreas_beta_cell_state_a\ttoy\tG1\tG2\tG5\tG6\tG7",
-            "pancreas_beta_cell_dedifferentiation_low_identity\ttoy\tG3\tG4\tG5\tG6\tG8",
+            "tissue_a_cell_type_a_state_a\ttoy\tG1\tG2\tG5\tG6\tG7",
+            "tissue_a_cell_type_a_low_identity_state\ttoy\tG3\tG4\tG5\tG6\tG8",
         ]
     )
     qc_gmt = "\n".join(
@@ -321,7 +326,7 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
     gene_map.to_csv(gene_map_path, sep="\t", index=False)
     bio_path.write_text(bio_gmt + "\n", encoding="utf-8")
     qc_path.write_text(qc_gmt + "\n", encoding="utf-8")
-    state_thresholds_path.write_text("pancreas_beta_cell_state_a: 0.25\n", encoding="utf-8")
+    state_thresholds_path.write_text("tissue_a_cell_type_a_state_a: 0.25\n", encoding="utf-8")
     query_genes_path.write_text("G1\nG3\nMISSING_GENE\n", encoding="utf-8")
     rank_genes = ["G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8", "MT-CO1", "MT-CO2", "RPLP0"]
     rank_cells = [f"c{i}" for i in range(1, 7)]
@@ -401,7 +406,7 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
     assert {"markers_present", "markers_missing", "marker_coverage_fraction"}.issubset(scores.columns)
     assert scores["ucell_score"].notna().all()
     assert scores["aucell_score"].notna().all()
-    assert scores.loc[scores["state_name"] == "pancreas_beta_cell_state_a", "markers_present"].str.contains("G7").all()
+    assert scores.loc[scores["state_name"] == "tissue_a_cell_type_a_state_a", "markers_present"].str.contains("G7").all()
     thresholds = pd.read_csv(out_dir / "cell_state_thresholds.tsv.gz", sep="\t")
     assert {"q90_score_diagnostic", "q95_score_diagnostic"}.issubset(thresholds.columns)
     activity = pd.read_csv(out_dir / "cell_state_activity.tsv.gz", sep="\t")
@@ -409,8 +414,8 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
     assert {"aucell_score", "ucell_score", "soft_weight_method", "threshold_status"}.issubset(activity.columns)
     assert {"q90_score_diagnostic", "q95_score_diagnostic"}.issubset(activity.columns)
     assert not activity["state_activity_weight"].equals(activity["ucell_score"])
-    assert (activity.loc[activity["state_name"] == "pancreas_beta_cell_state_a", "threshold_status"] == "hard_callable").all()
-    assert (activity.loc[activity["state_name"].str.contains("dedifferentiation"), "threshold_status"] == "continuous_only").all()
+    assert (activity.loc[activity["state_name"] == "tissue_a_cell_type_a_state_a", "threshold_status"] == "hard_callable").all()
+    assert (activity.loc[activity["state_name"].str.contains("low_identity"), "threshold_status"] == "continuous_only").all()
     aucell_activity = pd.read_csv(out_dir / "aucell_state_activity.tsv.gz", sep="\t")
     assert list(aucell_activity.columns) == [
         "cell_id",
@@ -422,7 +427,7 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
     ]
     hard_assignments = pd.read_csv(out_dir / "cell_state_hard_assignments.tsv.gz", sep="\t")
     assert {"hard_call", "threshold", "marker_coverage_pass"}.issubset(hard_assignments.columns)
-    state_a = hard_assignments.loc[hard_assignments["state_name"] == "pancreas_beta_cell_state_a"]
+    state_a = hard_assignments.loc[hard_assignments["state_name"] == "tissue_a_cell_type_a_state_a"]
     assert (state_a["threshold_source"] == "yaml_aucell_threshold").all()
     assert (state_a["threshold"] == 0.25).all()
     qc_exclusions = pd.read_csv(out_dir / "qc_exclusions.tsv.gz", sep="\t")
@@ -437,7 +442,7 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
     qc = pd.read_csv(out_dir / "bad_cell_qc_flags.tsv.gz", sep="\t")
     assert {"hard_exclusion_flag", "review_flag"}.issubset(qc.columns)
     calls = pd.read_csv(out_dir / "cell_state_calls.tsv.gz", sep="\t")
-    composite = calls.loc[calls["state_name"].str.contains("dedifferentiation")]
+    composite = calls.loc[calls["state_name"].str.contains("low_identity")]
     assert composite["requires_composite_validation"].all()
     assert "active" not in set(composite["call"])
     methods = (out_dir / "state_scoring_method.md").read_text(encoding="utf-8")

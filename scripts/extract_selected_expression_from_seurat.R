@@ -48,7 +48,7 @@ usage <- function() {
       "Optional:",
       "  --assay RNA --slot data --layer data",
       "  --metadata-cols donor_id,cell_type,disease_group",
-      "  --cell-filter-col cell_type --cell-filter-values beta,Beta",
+      "  --cell-filter-col cell_type --cell-filter-values 'Type A,Type B'",
       "  --drop-zero",
       sep = "\n"
     ),

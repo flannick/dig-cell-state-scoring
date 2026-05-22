@@ -338,9 +338,8 @@ for (set in sets) {
   score_percentile <- percent_rank(score)
   ucell_score <- if (score_method == "ucell") score else NA_real_
   marker_coverage <- length(present) / length(set$genes)
-  cell_type_scope <- sub("^pancreas_", "", set$state)
-  cell_type_scope <- sub("_cell_.*$", " cell", cell_type_scope)
-  cell_type_scope <- gsub("_", " ", cell_type_scope)
+  filter_values <- split_csv(args$cell_filter_values)
+  cell_type_scope <- if (length(filter_values) == 1) filter_values[[1]] else NA_character_
   out <- data.frame(
     cell_id = cells,
     state = set$state,

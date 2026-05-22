@@ -173,7 +173,7 @@ run-summary outputs. These are the preferred downstream interfaces.
 The Python runner separates the broad scoring input from the expression-summary
 input. Use `--rank-10x-dir` or `--rank-matrix-mtx --rank-genes --rank-cells` for
 the full sparse rank universe used by AUCell/UCell scoring. Use
-`--expression-matrix` for the small hit-gene expression table used by expression
+`--expression-matrix` for the small query-gene expression table used by expression
 and DE summaries. The full rank universe should not be exported as long-form
 text or dense-pivoted in pandas. Sparse rank-universe scoring is done directly
 from the Matrix Market/10x matrix and scores all signatures in a GMT pass from
@@ -196,7 +196,7 @@ Columns:
 
 ### `aucell_state_activity.tsv.gz`
 
-Minimal collaborator-facing AUCell state activity output. It contains only
+Minimal AUCell state activity output. It contains only
 biological states:
 
 - `cell_id`
