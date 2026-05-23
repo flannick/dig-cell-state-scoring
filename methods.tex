@@ -1,0 +1,62 @@
+\section{Cell-state scoring and state expression}
+
+Cell states are scored from a broad sparse rank universe, not from selected-gene
+or embedding-derived inputs. For cell \(i\) and state marker set \(G_s\), the
+workflow computes AUCell and UCell-style rank scores. AUCell is used for
+threshold diagnostics and state activity weights; UCell is retained as an
+additional scalable signature score.
+
+State calls are non-exclusive and optional. AUCell quantiles
+\(Q_{90}, Q_{95}, Q_{99}\) are reported as diagnostics only and are not used as
+default hard-call thresholds. If a state has no separable active component, it
+is retained as a continuous-only state.
+
+Raw counts \(c_{ig}\) are normalized to CP10K:
+\[
+\mathrm{CP10K}_{ig} = 10000 \frac{c_{ig}}{\sum_g c_{ig}}.
+\]
+
+Let \(r_{is}\) be the within-calibration-group percentile rank of the AUCell
+score for cell \(i\) and state \(s\). The default gradient weight is:
+\[
+w^{\mathrm{gradient}}_{is} = r_{is}^2.
+\]
+
+The high-tail weight is:
+\[
+w^{\mathrm{tail}}_{is} =
+\mathrm{clip}\left(\frac{r_{is} - 0.90}{0.10}, 0, 1\right).
+\]
+
+Weights are normalized within state across cells. They are not normalized across
+states within a cell, so multiple states can be active in the same cell.
+
+State-weighted expression for gene \(g\) and state \(s\) is:
+\[
+\bar{x}_{gs} =
+\frac{\sum_i w_{is}\mathrm{CP10K}_{ig}}{\sum_i w_{is}}.
+\]
+
+Weighted detection is:
+\[
+\mathrm{pct}_{gs} =
+\frac{\sum_i w_{is} I(c_{ig} > 0)}{\sum_i w_{is}}.
+\]
+
+Donor state-weighted expression is:
+\[
+y_{dgs} =
+\frac{\sum_{i \in d} w_{is}\mathrm{CP10K}_{ig}}
+{\sum_{i \in d} w_{is}}.
+\]
+
+Donor phenotype regression uses:
+\[
+\log(1 + y_{dgs}) \sim \mathrm{phenotype}_d + \mathrm{covariates}_d.
+\]
+
+Specificity summaries use a documented default Spearman association between
+\(\log(1+\mathrm{CP10K}_{ig})\) and the state activity weight. State-derived GMTs
+are built separately for curated markers, top absolute expression, top specific
+fold change, and top specificity significance so downstream PIGEAN analyses can
+be run by signature method without mixing marker definitions.

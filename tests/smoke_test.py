@@ -342,6 +342,34 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
     (rank_dir / "features.tsv").write_text("\n".join(f"{g}\t{g}" for g in rank_genes) + "\n", encoding="utf-8")
     (rank_dir / "barcodes.tsv").write_text("\n".join(rank_cells) + "\n", encoding="utf-8")
 
+    tiny_rank_check = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "run_cmdkp_state_scoring.py"),
+            "--expression",
+            str(expression_path),
+            "--metadata",
+            str(metadata_path),
+            "--biological-gmt",
+            str(bio_path),
+            "--qc-gmt",
+            str(qc_path),
+            "--gene-map",
+            str(gene_map_path),
+            "--out-dir",
+            str(tmpdir / "runner_tiny_fail"),
+            "--rank-10x-dir",
+            str(rank_dir),
+            "--min-calibration-cells",
+            "2",
+            "--allow-acceptance-failures",
+        ],
+        text=True,
+        capture_output=True,
+    )
+    assert tiny_rank_check.returncode != 0
+    assert "below --min-rank-genes" in tiny_rank_check.stderr
+
     run_cmd(
         [
             sys.executable,
@@ -373,6 +401,7 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
             "--min-score-iqr",
             "0",
             "--allow-acceptance-failures",
+            "--allow-small-rank-universe",
         ]
     )
 
@@ -411,11 +440,12 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
     assert {"q90_score_diagnostic", "q95_score_diagnostic"}.issubset(thresholds.columns)
     activity = pd.read_csv(out_dir / "cell_state_activity.tsv.gz", sep="\t")
     assert activity["state_activity_weight"].dropna().between(0, 1).all()
-    assert {"aucell_score", "ucell_score", "soft_weight_method", "threshold_status"}.issubset(activity.columns)
+    assert {"aucell_score", "ucell_score", "soft_weight_method", "threshold_status", "state_activity_weight_gradient", "state_activity_weight_hightail", "state_class"}.issubset(activity.columns)
     assert {"q90_score_diagnostic", "q95_score_diagnostic"}.issubset(activity.columns)
+    assert not activity.groupby("cell_id")["state_activity_weight_gradient"].sum().round(6).eq(1.0).all()
     assert not activity["state_activity_weight"].equals(activity["ucell_score"])
     assert (activity.loc[activity["state_name"] == "tissue_a_cell_type_a_state_a", "threshold_status"] == "hard_callable").all()
-    assert (activity.loc[activity["state_name"].str.contains("low_identity"), "threshold_status"] == "continuous_only").all()
+    assert (activity.loc[activity["state_name"].str.contains("low_identity"), "threshold_status"] == "composite_required").all()
     aucell_activity = pd.read_csv(out_dir / "aucell_state_activity.tsv.gz", sep="\t")
     assert list(aucell_activity.columns) == [
         "cell_id",
@@ -432,6 +462,9 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
     assert (state_a["threshold"] == 0.25).all()
     qc_exclusions = pd.read_csv(out_dir / "qc_exclusions.tsv.gz", sep="\t")
     assert not qc_exclusions["excluded"].any()
+    assert (out_dir / "qc_applied_exclusions.tsv.gz").exists()
+    assert (out_dir / "qc_direct_metric_flags.tsv.gz").exists()
+    assert (out_dir / "qc_signature_review_flags.tsv.gz").exists()
     expected_expr = pd.read_csv(out_dir / "expression_expected_assignments.tsv.gz", sep="\t")
     assert set(expected_expr["gene"]) == {"G1", "G3"}
     assert expected_expr["leave_one_gene_out_used"].any()
@@ -447,6 +480,92 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
     assert "active" not in set(composite["call"])
     methods = (out_dir / "state_scoring_method.md").read_text(encoding="utf-8")
     assert "local_ucell_style_rank_statistic" in methods
+
+    state_expr_dir = tmpdir / "state_expression"
+    run_cmd(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "summarize_state_expression.py"),
+            "--raw-10x-dir",
+            str(rank_dir),
+            "--metadata",
+            str(metadata_path),
+            "--cell-state-activity",
+            str(out_dir / "cell_state_activity.tsv.gz"),
+            "--states-gmt",
+            str(bio_path),
+            "--out-dir",
+            str(state_expr_dir),
+        ]
+    )
+    expr_spec = pd.read_csv(state_expr_dir / "all_gene_state_expression_specificity_cp10k.tsv.gz", sep="\t")
+    assert {"gradient_percentile_squared", "high_tail_percentile_90_100"}.issubset(set(expr_spec["state_weight_type"]))
+    assert {"weighted_mean_cp10k", "log1p_weighted_mean_cp10k", "q_value", "q_by_state", "q_by_gene"}.issubset(expr_spec.columns)
+    g1_parent = pd.read_csv(state_expr_dir / "all_gene_all_parent_cp10k.tsv.gz", sep="\t").set_index("gene").loc["G1"]
+    assert g1_parent["mean_cp10k_all_parent"] > 0
+
+    gmt_out_dir = tmpdir / "state_gmts"
+    run_cmd(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "make_state_expression_gmts.py"),
+            "--state-expression-specificity",
+            str(state_expr_dir / "all_gene_state_expression_specificity_cp10k.tsv.gz"),
+            "--original-state-gmt",
+            str(bio_path),
+            "--out-dir",
+            str(gmt_out_dir),
+            "--top-n",
+            "3",
+        ]
+    )
+    assert (gmt_out_dir / "gmt" / "original_markers.gmt").exists()
+    assert (gmt_out_dir / "gmt" / "top_absolute_expression.gmt").exists()
+    assert (gmt_out_dir / "gmt" / "top_specific_fc.gmt").exists()
+
+    pigean_dir = tmpdir / "pigean"
+    run_cmd(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "run_pigean_multi_y_for_state_gmts.py"),
+            "--pigean-command",
+            "definitely_missing_pigean",
+            "--multi-y-input",
+            str(tmpdir / "multi_y.tsv.gz"),
+            "--gmt-dir",
+            str(gmt_out_dir / "gmt"),
+            "--out-dir",
+            str(pigean_dir),
+            "--dry-run",
+        ]
+    )
+    assert (pigean_dir / "original_markers" / "run_pigean.sh").exists()
+    assert (pigean_dir / "top_absolute_expression" / "run_pigean.sh").exists()
+
+    phenotypes = pd.DataFrame({"donor_id": ["d1", "d2", "d3"], "case_status": ["case", "control", "case"]})
+    phenotypes_path = tmpdir / "phenotypes.tsv"
+    phenotypes.to_csv(phenotypes_path, sep="\t", index=False)
+    de_dir = tmpdir / "state_de"
+    run_cmd(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "run_state_phenotype_regression.py"),
+            "--raw-10x-dir",
+            str(rank_dir),
+            "--metadata",
+            str(metadata_path),
+            "--cell-state-activity",
+            str(out_dir / "cell_state_activity.tsv.gz"),
+            "--phenotypes",
+            str(phenotypes_path),
+            "--genes",
+            str(query_genes_path),
+            "--out-dir",
+            str(de_dir),
+        ]
+    )
+    de_parent = pd.read_csv(de_dir / "de_whole_parent.tsv.gz", sep="\t")
+    assert {"coefficient_units", "q_global", "q_by_trait", "q_by_gene"}.issubset(de_parent.columns)
 
     run_cmd(
         [
@@ -479,6 +598,7 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
             "--exclude-qc-states",
             "qc_bad_mitochondrial_transcripts",
             "--allow-acceptance-failures",
+            "--allow-small-rank-universe",
         ]
     )
     requested_exclusions = pd.read_csv(out_dir_excluded / "qc_exclusions.tsv.gz", sep="\t")

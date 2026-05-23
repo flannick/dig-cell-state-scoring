@@ -310,3 +310,147 @@ E_d[g | s] ~ phenotype_d + covariates_d
 
 If no phenotype table is supplied, DE output files are still written with
 headers and DE is recorded as skipped in `run_summary.json`.
+
+## All-Gene State Expression
+
+After scoring states, summarize every gene against the continuous state
+activity weights using sparse raw counts:
+
+```bash
+../.venv/bin/python cell_state_de/scripts/summarize_state_expression.py \
+  --raw-10x-dir results/cell_state_de/example_rank_universe_10x \
+  --metadata results/cell_state_de/example_metadata.tsv.gz \
+  --cell-state-activity results/cell_state_de/cmdkp_state_scoring/cell_state_activity.tsv.gz \
+  --states-gmt results/cell_state_de/example_cell_state_markers.gmt \
+  --out-dir results/cell_state_de/state_expression
+```
+
+The script computes CP10K from total raw counts per cell, then writes:
+
+- `all_gene_all_parent_cp10k.tsv.gz`
+- `all_gene_state_expression_cp10k.tsv.gz`
+- `all_gene_state_specificity_cp10k.tsv.gz`
+- `all_gene_state_expression_specificity_cp10k.tsv.gz`
+- `state_expression_summary.json`
+
+The primary expression unit is CP10K plus `log1p(mean CP10K)`. Specificity is
+reported as a Spearman association between `log1p(CP10K)` and the state weight,
+with BH FDR columns. Rows from low-signal or composite-required states are kept
+and flagged rather than silently removed.
+
+Two non-exclusive state weights are used:
+
+- `gradient_percentile_squared`: within-state AUCell percentile squared.
+- `high_tail_percentile_90_100`: the top AUCell percentile tail, scaled from
+  percentile 0.90 to 1.00.
+
+## State-Derived GMTs
+
+Build separate GMTs for curated markers and state-derived expression signatures:
+
+```bash
+../.venv/bin/python cell_state_de/scripts/make_state_expression_gmts.py \
+  --state-expression-specificity results/cell_state_de/state_expression/all_gene_state_expression_specificity_cp10k.tsv.gz \
+  --original-state-gmt results/cell_state_de/example_cell_state_markers.gmt \
+  --out-dir results/cell_state_de/state_gmts \
+  --top-n 250
+```
+
+Outputs:
+
+- `gmt/original_markers.gmt`
+- `gmt/top_absolute_expression.gmt`
+- `gmt/top_specific_fc.gmt`
+- `gmt/top_specific_logp.gmt`
+- `gmt_membership.tsv.gz`
+- `gmt_build_summary.tsv`
+
+The signature methods are deliberately separated so downstream PIGEAN runs do
+not mix curated markers with expanded expression-derived signatures.
+
+## PIGEAN Multi-Y
+
+Stage or run PIGEAN separately for each GMT method:
+
+```bash
+../.venv/bin/python cell_state_de/scripts/run_pigean_multi_y_for_state_gmts.py \
+  --pigean-command pigean \
+  --multi-y-input results/example_multi_y.tsv.gz \
+  --gmt-dir results/cell_state_de/state_gmts/gmt \
+  --out-dir results/cell_state_de/pigean_state_gmts
+```
+
+For each method, the wrapper writes `run_command.txt`, `run_summary.json`, and
+either PIGEAN outputs or a runnable `run_pigean.sh` if PIGEAN is unavailable or
+`--dry-run` is used.
+
+## Donor Phenotype Regression
+
+Run donor-level models from sparse counts and cell-state activity:
+
+```bash
+../.venv/bin/python cell_state_de/scripts/run_state_phenotype_regression.py \
+  --raw-10x-dir results/cell_state_de/example_rank_universe_10x \
+  --metadata results/cell_state_de/example_metadata.tsv.gz \
+  --cell-state-activity results/cell_state_de/cmdkp_state_scoring/cell_state_activity.tsv.gz \
+  --phenotypes results/cell_state_de/example_phenotypes.tsv \
+  --out-dir results/cell_state_de/state_de
+```
+
+Outputs:
+
+- `de_whole_parent.tsv.gz`
+- `de_state_weighted_gradient.tsv.gz`
+- `de_state_weighted_hightail.tsv.gz`
+- `de_state_specific_contrast.tsv.gz`
+- `de_run_summary.json`
+
+The model response is `log1p` donor-level mean CP10K. Numeric phenotypes are
+standardized; categorical phenotypes use the first sorted level as the reference
+group. Output tables include coefficient units and global, trait-level, and
+gene-level FDR columns.
+
+## Methods
+
+CP10K:
+
+```text
+CP10K_ig = 10000 * c_ig / sum_g c_ig
+```
+
+State-weighted mean:
+
+```text
+mean_gs = sum_i w_is CP10K_ig / sum_i w_is
+```
+
+Detection:
+
+```text
+pct_gs = sum_i w_is I(c_ig > 0) / sum_i w_is
+```
+
+Gradient weight:
+
+```text
+r_is = percentile_rank(AUCell_is within calibration group)
+w_gradient_is = r_is^2
+```
+
+High-tail weight:
+
+```text
+w_tail_is = clip((r_is - 0.90) / 0.10, 0, 1)
+```
+
+Donor state-weighted expression:
+
+```text
+y_dgs = sum_{i in donor d} w_is CP10K_ig / sum_{i in donor d} w_is
+```
+
+Regression:
+
+```text
+log1p(y_dgs) ~ phenotype_d + covariates_d
+```
