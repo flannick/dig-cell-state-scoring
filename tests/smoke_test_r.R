@@ -33,7 +33,7 @@ colnames(counts) <- paste0("c", 1:8)
 obj <- CreateSeuratObject(counts = counts)
 obj$donor_id <- rep(c("d1", "d2", "d3", "d4"), each = 2)
 obj$disease_group <- rep(c("T2D", "T2D", "ND", "ND"), each = 2)
-obj$cell_type <- "Type A"
+obj$cell_type <- "Type_A"
 obj$treatments <- "no_treatment"
 obj <- NormalizeData(obj, verbose = FALSE)
 
@@ -45,6 +45,7 @@ thresholds <- file.path(tmp, "thresholds.tsv.gz")
 metadata <- file.path(tmp, "metadata.tsv.gz")
 de <- file.path(tmp, "de.tsv.gz")
 membership <- file.path(tmp, "membership.tsv")
+rank_dir <- file.path(tmp, "rank_10x")
 saveRDS(obj, rds)
 writeLines("tissue_a_type_a_state_a\ttoy\tG1\tG2", gmt)
 write.table(
@@ -57,6 +58,30 @@ write.table(
 
 score_script <- file.path(root, "scripts", "score_gmt_states_from_seurat.R")
 de_script <- file.path(root, "scripts", "pseudobulk_de_from_seurat.R")
+rank_export_script <- file.path(root, "scripts", "export_rank_universe_10x_from_seurat.R")
+
+rank_export_status <- system2(
+  "/opt/homebrew/bin/Rscript",
+  c(
+    "--vanilla", rank_export_script,
+    "--rds", rds,
+    "--out-dir", rank_dir,
+    "--cell-filter-col", "cell_type",
+    "--cell-filter-values", "Type_A",
+    "--min-detection", "0"
+  ),
+  stdout = TRUE,
+  stderr = TRUE
+)
+if (!is.null(attr(rank_export_status, "status"))) {
+  stop("export_rank_universe_10x_from_seurat.R failed", call. = FALSE)
+}
+stopifnot(
+  file.exists(file.path(rank_dir, "matrix.mtx.gz")),
+  file.exists(file.path(rank_dir, "features.tsv.gz")),
+  file.exists(file.path(rank_dir, "barcodes.tsv.gz")),
+  file.exists(file.path(rank_dir, "cell_total_counts.tsv.gz"))
+)
 
 score_status <- system2(
   "/opt/homebrew/bin/Rscript",

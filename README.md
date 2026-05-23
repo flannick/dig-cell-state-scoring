@@ -215,6 +215,18 @@ Use separate inputs for scoring and expression summaries:
   matrix and scores all signatures in a GMT pass from one per-cell sparse rank
   ordering. The broad matrix is not dense-pivoted in pandas.
 
+For Seurat objects, export the rank universe with:
+
+```bash
+R_LIBS_USER=../.Rlib /opt/homebrew/bin/Rscript --vanilla cell_state_de/scripts/export_rank_universe_10x_from_seurat.R \
+  --rds data/external/example_map/example.rds \
+  --out-dir results/cell_state_de/example_rank_universe_10x \
+  --counts-layer counts \
+  --cell-filter-col cell_type \
+  --cell-filter-values 'Type A' \
+  --min-detection 0.01
+```
+
 The runner computes two local rank-based scores:
 
 ```text

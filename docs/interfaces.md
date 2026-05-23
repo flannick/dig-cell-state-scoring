@@ -177,7 +177,9 @@ the full sparse rank universe used by AUCell/UCell scoring. Use
 and DE summaries. The full rank universe should not be exported as long-form
 text or dense-pivoted in pandas. Sparse rank-universe scoring is done directly
 from the Matrix Market/10x matrix and scores all signatures in a GMT pass from
-one per-cell sparse rank ordering.
+one per-cell sparse rank ordering. For Seurat inputs,
+`export_rank_universe_10x_from_seurat.R` writes the required
+`matrix.mtx.gz`, `features.tsv.gz`, and `barcodes.tsv.gz` files.
 
 ### `ucell_scores.tsv.gz`
 
