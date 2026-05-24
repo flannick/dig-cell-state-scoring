@@ -14,6 +14,7 @@ import gzip
 import json
 import re
 import sys
+import time
 from datetime import datetime
 from dataclasses import dataclass
 from pathlib import Path
@@ -225,6 +226,13 @@ def load_sparse_rank_universe(args: argparse.Namespace, metadata: pd.DataFrame) 
     return SparseRankUniverse(matrix=mat, cells=metadata["cell_id"].astype(str).tolist(), genes=genes)
 
 
+def load_sparse_10x_dir(directory: str, metadata: pd.DataFrame) -> SparseRankUniverse | None:
+    if not directory:
+        return None
+    sparse_args = argparse.Namespace(rank_10x_dir=directory, rank_matrix_mtx="", rank_genes="", rank_cells="")
+    return load_sparse_rank_universe(sparse_args, metadata)
+
+
 def resolve_query_genes(args: argparse.Namespace, matrix: pd.DataFrame) -> list[str]:
     requested = read_gene_list(args.query_genes) if args.query_genes else []
     if args.query_gene:
@@ -299,6 +307,55 @@ def read_gmt(path: str, regex: str = "") -> list[GeneSet]:
     if not sets:
         raise SystemExit(f"No GMT rows found in {path}")
     return sets
+
+
+def load_state_manifest(path: str) -> dict[str, dict[str, object]]:
+    if not path:
+        return {}
+    frame = read_table(path)
+    if "state_name" not in frame.columns:
+        if "name" in frame.columns:
+            frame = frame.rename(columns={"name": "state_name"})
+        else:
+            raise SystemExit("--state-manifest must include a state_name column")
+    manifest: dict[str, dict[str, object]] = {}
+    bool_cols = {"is_composite_required", "is_qc", "allow_hard_call"}
+    for _, row in frame.dropna(subset=["state_name"]).iterrows():
+        values = {k: v for k, v in row.to_dict().items() if pd.notna(v)}
+        for col in bool_cols & set(values):
+            values[col] = str(values[col]).strip().lower() in {"1", "true", "yes", "y"}
+        manifest[str(values["state_name"])] = values
+    return manifest
+
+
+def apply_state_manifest(gene_sets: list[GeneSet], manifest: dict[str, dict[str, object]]) -> list[GeneSet]:
+    if not manifest:
+        return gene_sets
+    for gene_set in gene_sets:
+        if gene_set.name in manifest:
+            gene_set.meta.update({k: str(v) for k, v in manifest[gene_set.name].items() if k != "state_name"})
+            gene_set.meta["manifest_present"] = "true"
+        else:
+            gene_set.meta["manifest_present"] = "false"
+    return gene_sets
+
+
+class StepTimer:
+    def __init__(self) -> None:
+        self.started = time.time()
+        self.last = self.started
+        self.rows: list[dict[str, object]] = []
+
+    def mark(self, step: str, **extra: object) -> None:
+        now = time.time()
+        row = {
+            "step": step,
+            "seconds_since_previous": round(now - self.last, 3),
+            "seconds_since_start": round(now - self.started, 3),
+        }
+        row.update(extra)
+        self.rows.append(row)
+        self.last = now
 
 
 def harmonize_expression(
@@ -571,6 +628,20 @@ def infer_state_class(state_name: str, overrides: dict[str, str]) -> str:
     return "unknown"
 
 
+def gene_set_scope(gene_set: GeneSet, tissues: Iterable[str], cell_types: Iterable[str]) -> tuple[str, str, str]:
+    if gene_set.meta.get("tissue") or gene_set.meta.get("cell_type"):
+        tissue = norm_name(gene_set.meta.get("tissue", ""))
+        cell_type = norm_name(gene_set.meta.get("cell_type", ""))
+        return tissue, cell_type, norm_name(gene_set.meta.get("state_label", gene_set.name))
+    return infer_state_scope(gene_set.name, tissues, cell_types)
+
+
+def gene_set_class(gene_set: GeneSet, overrides: dict[str, str]) -> str:
+    if gene_set.meta.get("state_class"):
+        return str(gene_set.meta["state_class"])
+    return infer_state_class(gene_set.name, overrides)
+
+
 def score_biological_states(
     matrix: pd.DataFrame,
     ucell_ranks: pd.DataFrame,
@@ -579,18 +650,19 @@ def score_biological_states(
     metadata: pd.DataFrame,
     gene_sets: list[GeneSet],
     args: argparse.Namespace,
+    sparse_scores: dict[str, tuple[pd.Series, pd.Series, list[str]]] | None = None,
 ) -> pd.DataFrame:
     rows = []
     tissues = metadata[args.tissue_col].unique()
     cell_types = metadata[args.cell_type_col].unique()
     group_keys = [args.map_id_col, args.tissue_col, args.cell_type_col]
-    sparse_scores = (
+    sparse_scores = sparse_scores if sparse_scores is not None else (
         sparse_rank_scores_for_gene_sets(rank_universe, gene_sets, args.aucell_max_rank, args.max_rank)
         if rank_universe is not None
         else {}
     )
     for gene_set in gene_sets:
-        scope_tissue, scope_cell_type, _ = infer_state_scope(gene_set.name, tissues, cell_types)
+        scope_tissue, scope_cell_type, _ = gene_set_scope(gene_set, tissues, cell_types)
         matrix_genes = rank_universe.genes if rank_universe is not None else matrix.columns
         info = marker_info(gene_set, matrix_genes)
         if rank_universe is not None:
@@ -611,8 +683,9 @@ def score_biological_states(
         score_frame["scope_tissue"] = scope_tissue
         score_frame["scope_cell_type"] = scope_cell_type
         score_frame["state_kind"] = state_kind(gene_set.name)
-        score_frame["is_composite_state"] = is_composite_state(gene_set.name)
-        score_frame["state_class"] = infer_state_class(gene_set.name, args.state_class_overrides)
+        score_frame["is_composite_state"] = gene_set.meta.get("is_composite_required", "false") == "true" or is_composite_state(gene_set.name)
+        score_frame["state_class"] = gene_set_class(gene_set, args.state_class_overrides)
+        score_frame["manifest_present"] = gene_set.meta.get("manifest_present", "false")
         for key, value in info.items():
             if key != "present_list":
                 score_frame[key] = value
@@ -647,9 +720,10 @@ def score_qc_signatures(
     metadata: pd.DataFrame,
     qc_sets: list[GeneSet],
     args: argparse.Namespace,
+    sparse_scores: dict[str, tuple[pd.Series, pd.Series, list[str]]] | None = None,
 ) -> pd.DataFrame:
     rows = []
-    sparse_scores = (
+    sparse_scores = sparse_scores if sparse_scores is not None else (
         sparse_rank_scores_for_gene_sets(rank_universe, qc_sets, args.aucell_max_rank, args.max_rank)
         if rank_universe is not None
         else {}
@@ -709,15 +783,38 @@ def adaptive_low_flag(values: pd.Series) -> pd.Series:
     return values < med - 3 * spread if spread > 0 else pd.Series(False, index=values.index)
 
 
-def qc_metrics(matrix: pd.DataFrame, metadata: pd.DataFrame, qc_scores: pd.DataFrame, args: argparse.Namespace) -> pd.DataFrame:
+def sparse_gene_sum(universe: SparseRankUniverse, mask: np.ndarray) -> pd.Series:
+    if not mask.any():
+        return pd.Series(0.0, index=universe.cells)
+    return pd.Series(np.asarray(universe.matrix[:, mask].sum(axis=1)).ravel(), index=universe.cells)
+
+
+def qc_metric_inputs(
+    matrix: pd.DataFrame,
+    raw_counts: SparseRankUniverse | None,
+) -> tuple[pd.Series, pd.Series, pd.Series, pd.Series, pd.Series, pd.Series, str]:
+    if raw_counts is not None:
+        genes = pd.Series(raw_counts.genes, index=raw_counts.genes)
+        total_counts = pd.Series(np.asarray(raw_counts.matrix.sum(axis=1)).ravel(), index=raw_counts.cells)
+        n_genes = pd.Series(np.diff(raw_counts.matrix.indptr), index=raw_counts.cells)
+        mito = sparse_gene_sum(raw_counts, genes.str.startswith("MT-").to_numpy())
+        ribo = sparse_gene_sum(raw_counts, genes.str.match(r"RP[LS]").to_numpy())
+        hemo = sparse_gene_sum(raw_counts, genes.str.startswith(HEMOGLOBIN_PREFIXES).to_numpy())
+        malat = sparse_gene_sum(raw_counts, (genes == "MALAT1").to_numpy())
+        return total_counts, n_genes, mito, ribo, hemo, malat, "full_sparse_counts"
     genes = pd.Series(matrix.columns, index=matrix.columns)
     total_counts = matrix.sum(axis=1)
     n_genes = (matrix > 0).sum(axis=1)
-    mito = matrix.loc[:, genes.str.startswith("MT-").to_numpy()].sum(axis=1) if genes.str.startswith("MT-").any() else 0
-    ribo = matrix.loc[:, genes.str.match(r"RP[LS]").to_numpy()].sum(axis=1) if genes.str.match(r"RP[LS]").any() else 0
+    mito = matrix.loc[:, genes.str.startswith("MT-").to_numpy()].sum(axis=1) if genes.str.startswith("MT-").any() else pd.Series(0.0, index=matrix.index)
+    ribo = matrix.loc[:, genes.str.match(r"RP[LS]").to_numpy()].sum(axis=1) if genes.str.match(r"RP[LS]").any() else pd.Series(0.0, index=matrix.index)
     hemo_mask = genes.str.startswith(HEMOGLOBIN_PREFIXES)
-    hemo = matrix.loc[:, hemo_mask.to_numpy()].sum(axis=1) if hemo_mask.any() else 0
-    malat = matrix["MALAT1"] if "MALAT1" in matrix.columns else 0
+    hemo = matrix.loc[:, hemo_mask.to_numpy()].sum(axis=1) if hemo_mask.any() else pd.Series(0.0, index=matrix.index)
+    malat = matrix["MALAT1"] if "MALAT1" in matrix.columns else pd.Series(0.0, index=matrix.index)
+    return total_counts, n_genes, mito, ribo, hemo, malat, "legacy_expression_matrix"
+
+
+def qc_metrics(matrix: pd.DataFrame, metadata: pd.DataFrame, qc_scores: pd.DataFrame, args: argparse.Namespace, raw_counts: SparseRankUniverse | None = None) -> pd.DataFrame:
+    total_counts, n_genes, mito, ribo, hemo, malat, qc_metric_source = qc_metric_inputs(matrix, raw_counts)
     out = metadata[["cell_id", args.map_id_col, args.tissue_col, args.cell_type_col, args.sample_col]].copy()
     out["total_counts"] = total_counts.reindex(out["cell_id"]).to_numpy()
     out["n_genes_detected"] = n_genes.reindex(out["cell_id"]).to_numpy()
@@ -726,6 +823,7 @@ def qc_metrics(matrix: pd.DataFrame, metadata: pd.DataFrame, qc_scores: pd.DataF
     out["percent_ribosomal"] = 100 * np.asarray(ribo.reindex(out["cell_id"]) if hasattr(ribo, "reindex") else 0) / denom
     out["percent_hemoglobin"] = 100 * np.asarray(hemo.reindex(out["cell_id"]) if hasattr(hemo, "reindex") else 0) / denom
     out["percent_malat1"] = 100 * np.asarray(malat.reindex(out["cell_id"]) if hasattr(malat, "reindex") else 0) / denom
+    out["qc_metric_source"] = qc_metric_source
     if args.doublet_col and args.doublet_col in metadata.columns:
         out["doublet_score"] = pd.to_numeric(metadata[args.doublet_col], errors="coerce")
     else:
@@ -817,7 +915,7 @@ def explore_aucell_threshold(scores: pd.Series, args: argparse.Namespace) -> tup
 
 
 def class_allows_hard_call(state_class: str) -> bool:
-    return state_class in {"process_gradient", "rare_process", "unknown"}
+    return state_class in {"process_gradient", "rare_process"}
 
 
 def class_continuous_status(state_class: str) -> tuple[str, str]:
@@ -827,6 +925,8 @@ def class_continuous_status(state_class: str) -> tuple[str, str]:
         return "continuous_only", f"{state_class}_defaults_to_gradient"
     if state_class == "qc_or_contamination":
         return "continuous_only", "qc_signature_not_biological_hard_call"
+    if state_class == "unknown":
+        return "continuous_only_unknown_class", "unknown_state_class_requires_manifest_or_yaml_for_hard_calls"
     return "continuous_only", "no_supported_aucell_hard_threshold"
 
 
@@ -911,7 +1011,12 @@ def compute_activity(
     threshold_lookup = None
     if thresholds is not None and not thresholds.empty:
         threshold_lookup = thresholds.set_index(["map_id", "tissue", "annotated_cell_type", "state_name"])
-    for state_name, group in scores.groupby(score_state_col, sort=False):
+    if {"map_id", "tissue", "annotated_cell_type"}.issubset(scores.columns):
+        group_cols = ["map_id", "tissue", "annotated_cell_type", score_state_col]
+    else:
+        group_cols = [score_state_col]
+    for group_key, group in scores.groupby(group_cols, sort=False):
+        state_name = group_key[-1] if isinstance(group_key, tuple) else group_key
         out = group[["cell_id"]].copy()
         if {"map_id", "tissue", "annotated_cell_type"}.issubset(group.columns):
             out[["map_id", "tissue", "annotated_cell_type"]] = group[["map_id", "tissue", "annotated_cell_type"]]
@@ -953,31 +1058,41 @@ def compute_activity(
                 on=key_cols,
                 how="left",
             )
-            if not merged.empty:
-                threshold_value = merged["threshold_value"].iloc[0]
-                threshold_status = merged["threshold_status"].iloc[0]
-                threshold_method = merged["threshold_method"].iloc[0]
-                threshold_reason = merged["threshold_reason"].iloc[0]
-                q50 = merged["q50_score"].iloc[0]
-                q75 = merged["q75_score"].iloc[0]
-                q90 = merged["q90_score_diagnostic"].iloc[0]
-                q95 = merged["q95_score_diagnostic"].iloc[0]
-                q99 = merged["q99_score"].iloc[0]
-                out["threshold_value"] = threshold_value
-                out["threshold_status"] = threshold_status
-                out["threshold_method"] = threshold_method
-                out["threshold_reason"] = threshold_reason
-                out["q50_score"] = q50
-                out["q75_score"] = q75
-                out["q90_score_diagnostic"] = q90
-                out["q95_score_diagnostic"] = q95
-                out["q99_score"] = q99
-                scores_for_weight = pd.to_numeric(out["aucell_score"], errors="coerce")
-                percentile = group["score_percentile_within_calibration_group"].reindex(out.index).fillna(0.0).to_numpy(dtype=float)
-                out["aucell_percentile_within_group"] = percentile
-                out["state_activity_weight_gradient"] = np.square(percentile)
-                out["state_activity_weight_hightail"] = np.clip((percentile - 0.90) / 0.10, 0, 1)
-                out["state_class"] = merged["state_class"].iloc[0]
+            for _, threshold_row in merged.iterrows():
+                row_mask = (
+                    group["map_id"].eq(threshold_row["map_id"])
+                    & group["tissue"].eq(threshold_row["tissue"])
+                    & group["annotated_cell_type"].eq(threshold_row["annotated_cell_type"])
+                    & group["state_name"].eq(threshold_row["state_name"])
+                )
+                idx = group.index[row_mask]
+                if len(idx) == 0:
+                    continue
+                out_idx = out.index.intersection(idx)
+                threshold_value = threshold_row["threshold_value"]
+                threshold_status = threshold_row["threshold_status"]
+                threshold_method = threshold_row["threshold_method"]
+                threshold_reason = threshold_row["threshold_reason"]
+                q50 = threshold_row["q50_score"]
+                q75 = threshold_row["q75_score"]
+                q90 = threshold_row["q90_score_diagnostic"]
+                q95 = threshold_row["q95_score_diagnostic"]
+                q99 = threshold_row["q99_score"]
+                out.loc[out_idx, "threshold_value"] = threshold_value
+                out.loc[out_idx, "threshold_status"] = threshold_status
+                out.loc[out_idx, "threshold_method"] = threshold_method
+                out.loc[out_idx, "threshold_reason"] = threshold_reason
+                out.loc[out_idx, "q50_score"] = q50
+                out.loc[out_idx, "q75_score"] = q75
+                out.loc[out_idx, "q90_score_diagnostic"] = q90
+                out.loc[out_idx, "q95_score_diagnostic"] = q95
+                out.loc[out_idx, "q99_score"] = q99
+                scores_for_weight = pd.to_numeric(out.loc[out_idx, "aucell_score"], errors="coerce")
+                percentile = group.loc[out_idx, "score_percentile_within_calibration_group"].fillna(0.0).to_numpy(dtype=float)
+                out.loc[out_idx, "aucell_percentile_within_group"] = percentile
+                out.loc[out_idx, "state_activity_weight_gradient"] = np.square(percentile)
+                out.loc[out_idx, "state_activity_weight_hightail"] = np.clip((percentile - 0.90) / 0.10, 0, 1)
+                out.loc[out_idx, "state_class"] = threshold_row["state_class"]
                 if threshold_status == "hard_callable" and pd.notna(threshold_value):
                     denom = q99 - threshold_value if pd.notna(q99) and pd.notna(threshold_value) else np.nan
                     method = "aucell_threshold_to_q99"
@@ -987,11 +1102,11 @@ def compute_activity(
                     method = "aucell_q75_to_q99_continuous_only"
                     baseline = q75
                 if pd.notna(denom) and denom > 0 and pd.notna(baseline):
-                    out["state_activity_weight"] = ((scores_for_weight - baseline) / denom).clip(0, 1).fillna(0.0).to_numpy()
+                    out.loc[out_idx, "state_activity_weight"] = ((scores_for_weight - baseline) / denom).clip(0, 1).fillna(0.0).to_numpy()
                 else:
-                    out["state_activity_weight"] = 0.0
-                out["soft_weight_method"] = method
-            else:
+                    out.loc[out_idx, "state_activity_weight"] = 0.0
+                out.loc[out_idx, "soft_weight_method"] = method
+            if merged.empty:
                 out["state_activity_weight"] = 0.0
                 out["state_activity_weight_gradient"] = 0.0
                 out["state_activity_weight_hightail"] = 0.0
@@ -1619,6 +1734,7 @@ def write_methods(out_dir: Path, args: argparse.Namespace, mapping_info: dict[st
         f"- AUCell parameters: `aucMaxRank={args.aucell_max_rank}`, `ties.method=average`, threshold exploration bins `{args.aucell_threshold_bins}`",
         f"- Biological GMT: `{args.biological_gmt}`",
         f"- Auxiliary bad-cell QC GMT: `{args.qc_gmt}`",
+        f"- State manifest: `{args.state_manifest or 'not_supplied_state_name_fallback'}`",
         f"- Gene ID handling: `{mapping_info['gene_id_type']}`",
         f"- Duplicate collapse method: `{mapping_info['duplicate_collapse_method']}`",
         f"- Marker coverage rules: score with at least 1 marker present; confident calls require `n_markers_present >= {args.min_markers_present}` and `marker_coverage_fraction >= {args.min_marker_coverage}`",
@@ -1655,6 +1771,8 @@ def main() -> None:
     parser.add_argument("--states-gmt", default="", help="Alias for --biological-gmt")
     parser.add_argument("--qc-gmt", default="")
     parser.add_argument("--qc-states-gmt", default="", help="Alias for --qc-gmt")
+    parser.add_argument("--state-manifest", default="", help="Optional TSV with state_name, tissue, cell_type, state_class, and related metadata")
+    parser.add_argument("--qc-raw-10x-dir", default="", help="Optional full raw 10x counts for direct QC metrics; defaults to --rank-10x-dir when available")
     parser.add_argument("--out-dir", default="")
     parser.add_argument("--expression-kind", choices=["raw_counts", "log1p_normalized"], default="log1p_normalized")
     parser.add_argument("--phenotypes", default="")
@@ -1702,8 +1820,11 @@ def main() -> None:
     parser.add_argument("--de-hard-assignments-out", default="")
     parser.add_argument("--state-summary-out", default="")
     parser.add_argument("--run-summary-out", default="")
+    parser.add_argument("--timing-log-out", default="")
     parser.add_argument("--allow-acceptance-failures", action="store_true")
     args = parser.parse_args()
+
+    timer = StepTimer()
 
     args.expression = args.expression or args.expression_matrix
     args.metadata = args.metadata or args.cell_metadata
@@ -1734,6 +1855,7 @@ def main() -> None:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     metadata = read_table(args.metadata)
+    timer.mark("load_metadata", n_rows=len(metadata))
     if args.cell_type_col not in metadata.columns and "annotated_cell_type" in metadata.columns:
         args.cell_type_col = "annotated_cell_type"
     required_meta = ["cell_id", args.map_id_col, args.tissue_col, args.cell_type_col, args.donor_col]
@@ -1745,8 +1867,10 @@ def main() -> None:
     metadata = metadata.drop_duplicates("cell_id").copy()
     metadata = apply_metadata_filter(metadata, args.parent_cell_filter)
     args.state_class_overrides = load_state_class_config(args.state_class_config)
+    state_manifest = load_state_manifest(args.state_manifest)
     expression, mapping_info = harmonize_expression(read_expression_input(args.expression), args.expression_kind, args.gene_map, args.duplicate_collapse)
     matrix = expression_matrix(expression, metadata["cell_id"])
+    timer.mark("load_expression_matrix", n_cells=matrix.shape[0], n_genes=matrix.shape[1])
     if args.aucell_max_rank <= 0:
         rank_gene_count = len(read_10x_features(resolve_10x_path(args.rank_10x_dir, ["features.tsv.gz", "features.tsv", "genes.tsv.gz", "genes.tsv"]))) if args.rank_10x_dir and not args.rank_genes else None
         if rank_gene_count is None and args.rank_genes:
@@ -1754,6 +1878,11 @@ def main() -> None:
         args.aucell_max_rank = max(1, int(np.ceil((rank_gene_count or matrix.shape[1]) * 0.05)))
     query_genes = resolve_query_genes(args, matrix)
     rank_universe = load_sparse_rank_universe(args, metadata)
+    timer.mark(
+        "load_rank_universe",
+        n_cells=rank_universe.matrix.shape[0] if rank_universe is not None else None,
+        n_genes=rank_universe.matrix.shape[1] if rank_universe is not None else None,
+    )
     n_genes_ranked = int(rank_universe.matrix.shape[1]) if rank_universe is not None else int(matrix.shape[1])
     if n_genes_ranked < args.min_rank_genes:
         message = (
@@ -1774,14 +1903,39 @@ def main() -> None:
     ucell_ranks = rank_matrix_for_ucell(matrix, args.max_rank) if rank_universe is None else pd.DataFrame(index=matrix.index)
     aucell_ranks = rank_matrix_for_aucell(matrix) if rank_universe is None else pd.DataFrame(index=matrix.index)
 
-    biological_sets = read_gmt(args.biological_gmt)
-    qc_sets = read_gmt(args.qc_gmt) if args.qc_gmt and Path(args.qc_gmt).exists() else []
-    biological_scores = score_biological_states(matrix, ucell_ranks, aucell_ranks, rank_universe, metadata, biological_sets, args)
-    qc_scores = score_qc_signatures(matrix, ucell_ranks, aucell_ranks, rank_universe, metadata, qc_sets, args) if qc_sets else empty_table(["cell_id", "map_id", "tissue", "annotated_cell_type", "qc_signature_name", "ucell_score", "aucell_score", "state_class", "qc_tier", "qc_category", "score_percentile_within_sample", "n_markers_requested", "n_markers_present", "marker_coverage_fraction", "markers_present", "markers_missing"])
+    biological_sets = apply_state_manifest(read_gmt(args.biological_gmt), state_manifest)
+    qc_sets = apply_state_manifest(read_gmt(args.qc_gmt), state_manifest) if args.qc_gmt and Path(args.qc_gmt).exists() else []
+    combined_sparse_scores = None
+    if rank_universe is not None:
+        combined_sparse_scores = sparse_rank_scores_for_gene_sets(
+            rank_universe,
+            biological_sets + qc_sets,
+            args.aucell_max_rank,
+            args.max_rank,
+        )
+        timer.mark("score_sparse_rank_universe_once", n_gene_sets=len(biological_sets) + len(qc_sets))
+    biological_scores = score_biological_states(
+        matrix,
+        ucell_ranks,
+        aucell_ranks,
+        rank_universe,
+        metadata,
+        biological_sets,
+        args,
+        sparse_scores=combined_sparse_scores,
+    )
+    qc_scores = (
+        score_qc_signatures(matrix, ucell_ranks, aucell_ranks, rank_universe, metadata, qc_sets, args, sparse_scores=combined_sparse_scores)
+        if qc_sets
+        else empty_table(["cell_id", "map_id", "tissue", "annotated_cell_type", "qc_signature_name", "ucell_score", "aucell_score", "state_class", "qc_tier", "qc_category", "score_percentile_within_sample", "n_markers_requested", "n_markers_present", "marker_coverage_fraction", "markers_present", "markers_missing"])
+    )
+    timer.mark("assemble_score_tables", n_biological_score_rows=len(biological_scores), n_qc_score_rows=len(qc_scores))
     state_thresholds = load_threshold_yaml(args.state_thresholds_yaml)
     qc_thresholds = load_threshold_yaml(args.qc_thresholds_yaml)
     thresholds = calibrate_thresholds(biological_scores, args, state_thresholds)
-    bad_flags = qc_metrics(matrix, metadata, qc_scores, args)
+    timer.mark("calibrate_thresholds", n_threshold_rows=len(thresholds))
+    qc_raw_counts = load_sparse_10x_dir(args.qc_raw_10x_dir, metadata) if args.qc_raw_10x_dir else rank_universe
+    bad_flags = qc_metrics(matrix, metadata, qc_scores, args, raw_counts=qc_raw_counts)
     bio_activity = compute_activity(biological_scores, "state_name", "biological", thresholds)
     qc_activity = compute_activity(qc_scores, "qc_signature_name", "qc")
     activity = pd.concat([bio_activity, qc_activity], ignore_index=True)
@@ -1789,10 +1943,12 @@ def main() -> None:
     exclusions = qc_exclusions(activity, args)
     qc_review = qc_signature_review_flags(activity, args)
     qc_legacy = qc_legacy_fixed_tail_flags(activity, args)
+    timer.mark("compute_activity_and_qc", n_activity_rows=len(activity))
     expression_expected = expected_expression_summary(matrix, activity, {s.name: s for s in biological_sets}, aucell_ranks, rank_universe, args, query_genes)
     expression_hard = hard_expression_summary(matrix, hard, args, query_genes)
     phenotypes = read_table(args.phenotypes) if args.phenotypes else None
     de_expected, de_hard = de_summaries(matrix, metadata, activity, hard, phenotypes, args, query_genes)
+    timer.mark("legacy_selected_gene_summaries", n_expected_rows=len(expression_expected), n_hard_rows=len(expression_hard))
 
     calls = call_states(biological_scores, thresholds, bad_flags, args)
     multilabel = multilabel_summary(calls, bad_flags)
@@ -1811,6 +1967,7 @@ def main() -> None:
     state_summary = state_summary.merge(hard_counts, on=["state_type", "state_name"], how="left")
     state_summary["hard_assigned_fraction"] = state_summary["n_hard_assigned"] / state_summary["n_cells_scored"]
     failures = acceptance_checks(summary, biological_scores, qc_scores, calls)
+    timer.mark("build_calls_and_summaries", n_failures=len(failures))
 
     ucell_scores = build_ucell_scores_output(biological_scores, qc_scores)
     aucell_state_activity = activity.loc[activity["state_type"] == "biological"].merge(
@@ -1844,6 +2001,7 @@ def main() -> None:
     write_table(multilabel, out_dir / "cell_multilabel_state_summary.tsv.gz")
     write_table(summary, out_dir / "state_call_summary.tsv.gz")
     write_methods(out_dir, args, mapping_info, failures)
+    timer.mark("write_outputs")
 
     run_summary = {
         "input_files": {
@@ -1853,6 +2011,8 @@ def main() -> None:
             "cell_metadata": args.metadata,
             "states_gmt": args.biological_gmt,
             "qc_states_gmt": args.qc_gmt,
+            "state_manifest": args.state_manifest or None,
+            "qc_raw_10x_dir": args.qc_raw_10x_dir or args.rank_10x_dir or None,
             "phenotypes": args.phenotypes or None,
         },
         "parameters": {
@@ -1876,10 +2036,13 @@ def main() -> None:
         "n_states": int(len(biological_sets)),
         "n_qc_states": int(len(qc_sets)),
         "n_excluded_cells": int(exclusions["excluded"].sum()),
+        "qc_metric_source": str(bad_flags["qc_metric_source"].iloc[0]) if "qc_metric_source" in bad_flags.columns and not bad_flags.empty else None,
+        "timing": timer.rows,
         "software_versions": {"python": sys.version.split()[0], "pandas": pd.__version__, "numpy": np.__version__},
         "timestamp": datetime.now().isoformat(timespec="seconds"),
     }
     output_path(args, "run_summary_out", "run_summary.json").write_text(json.dumps(run_summary, indent=2), encoding="utf-8")
+    write_table(pd.DataFrame(timer.rows), output_path(args, "timing_log_out", "timing_log.tsv"))
 
     if failures and not args.allow_acceptance_failures:
         raise SystemExit("Acceptance checks failed:\n" + "\n".join(failures))

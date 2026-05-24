@@ -102,6 +102,34 @@ def effective_n(weights: np.ndarray) -> float:
     return float(weights.sum() ** 2 / denom) if denom > 0 else np.nan
 
 
+def sparse_square(mat: sparse.csr_matrix) -> sparse.csr_matrix:
+    out = mat.copy()
+    out.data = np.square(out.data)
+    return out
+
+
+def weighted_vs_parent_p_values(
+    state_mean: np.ndarray,
+    state_second: np.ndarray,
+    parent_mean: np.ndarray,
+    parent_second: np.ndarray,
+    n_parent: int,
+    eff_n: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    state_var = np.maximum(state_second - np.square(state_mean), 0)
+    parent_var = np.maximum(parent_second - np.square(parent_mean), 0)
+    if not np.isfinite(eff_n) or eff_n <= 1 or n_parent <= 1:
+        return np.full(len(state_mean), np.nan), np.full(len(state_mean), np.nan)
+    se = np.sqrt((state_var / eff_n) + (parent_var / n_parent))
+    diff = state_mean - parent_mean
+    z = np.full(len(state_mean), np.nan)
+    valid = np.isfinite(se) & (se > 0)
+    z[valid] = diff[valid] / se[valid]
+    p = np.full(len(state_mean), np.nan)
+    p[valid] = 2 * stats.norm.sf(np.abs(z[valid]))
+    return z, p
+
+
 def expression_scope(row: pd.Series) -> str:
     if row.get("state_class") == "composite_required":
         return "component_score_summary_not_true_state"
@@ -136,6 +164,7 @@ def main() -> None:
     if np.any(~np.isfinite(totals)) or np.any(totals <= 0):
         raise SystemExit("Raw count totals are missing or nonpositive")
     cp10k = counts.multiply(10000.0 / totals[:, None]).tocsr()
+    cp10k_sq = sparse_square(cp10k)
     detected = counts.copy()
     detected.data = np.ones_like(detected.data, dtype=float)
     detected = detected.astype(float).tocsr()
@@ -179,60 +208,128 @@ def main() -> None:
 
     expr_rows = []
     spec_rows = []
+    donor_level_rows = []
     weight_specs = [
         ("gradient_percentile_squared", "state_activity_weight_gradient"),
         ("high_tail_percentile_90_100", "state_activity_weight_hightail"),
     ]
+    state_groups: dict[str, pd.DataFrame] = {}
+    state_meta: dict[str, pd.Series] = {}
+    state_parent: dict[str, str] = {}
     for state, group in activity.groupby("state_name", sort=False):
-        meta = group.iloc[0]
         positions = cell_pos.reindex(group["cell_id"]).dropna().astype(int).to_numpy()
         parent = parent_key.iloc[positions].mode().iloc[0] if len(positions) else "all"
+        state_groups[state] = group
+        state_meta[state] = group.iloc[0]
+        state_parent[state] = parent
+
+    for parent in pd.unique(list(state_parent.values())):
+        states_for_parent = [state for state, value in state_parent.items() if value == parent]
         parent_idx = np.flatnonzero(parent_key.to_numpy() == parent)
+        if len(parent_idx) == 0:
+            continue
         parent_mean = np.asarray(cp10k[parent_idx, :].mean(axis=0)).ravel()
+        parent_second = np.asarray(cp10k_sq[parent_idx, :].mean(axis=0)).ravel()
         parent_pct = np.asarray(detected[parent_idx, :].mean(axis=0)).ravel()
         donor_ids = metadata.iloc[parent_idx][args.donor_col].astype(str).to_numpy()
         donor_levels = pd.Index(pd.unique(donor_ids))
-        parent_donor_means = []
+        columns = []
+        col_meta = []
+        for state in states_for_parent:
+            group = state_groups[state]
+            positions = cell_pos.reindex(group["cell_id"]).dropna().astype(int).to_numpy()
+            for weight_type, weight_col in weight_specs:
+                weights = pd.to_numeric(group[weight_col], errors="coerce").fillna(0.0).to_numpy(float)
+                keep = weights > 0
+                if keep.any():
+                    columns.append(sparse.csr_matrix((weights[keep], (positions[keep], np.zeros(int(keep.sum())))), shape=(len(cells), 1)))
+                else:
+                    columns.append(sparse.csr_matrix((len(cells), 1), dtype=float))
+                col_meta.append((state, weight_type))
+        if not columns:
+            continue
+        weight_matrix = sparse.hstack(columns, format="csr")
+        denom = np.asarray(weight_matrix.sum(axis=0)).ravel()
+        denom_safe = np.where(denom > 0, denom, np.nan)
+        state_sums = weight_matrix.T @ cp10k
+        state_detected = weight_matrix.T @ detected
+        state_second_sums = weight_matrix.T @ cp10k_sq
+        state_means = np.asarray(state_sums.multiply(1 / denom_safe[:, None]).todense())
+        state_pcts = np.asarray(state_detected.multiply(1 / denom_safe[:, None]).todense())
+        state_seconds = np.asarray(state_second_sums.multiply(1 / denom_safe[:, None]).todense())
+        weight_square_sums = np.asarray(weight_matrix.power(2).sum(axis=0)).ravel()
+        eff_n_by_col = np.full(len(denom), np.nan)
+        valid_eff = weight_square_sums > 0
+        eff_n_by_col[valid_eff] = denom[valid_eff] ** 2 / weight_square_sums[valid_eff]
+        median_cells = float(pd.Series(donor_ids).value_counts().median()) if len(donor_ids) else np.nan
+
+        donor_balanced_mean_sum = np.zeros_like(state_means)
+        donor_balanced_pct_sum = np.zeros_like(state_pcts)
+        donor_balanced_count = np.zeros((len(col_meta), 1), dtype=float)
+        donor_counts_with_weight = np.zeros(len(col_meta), dtype=int)
+        donor_weight_sums_by_col = [[] for _ in col_meta]
         for donor in donor_levels:
             didx = parent_idx[donor_ids == donor]
-            parent_donor_means.append(np.asarray(cp10k[didx, :].mean(axis=0)).ravel())
-        parent_donor_means = np.vstack(parent_donor_means) if len(parent_donor_means) else np.empty((0, len(genes)))
+            if len(didx) == 0:
+                continue
+            donor_weights = weight_matrix[didx, :]
+            donor_denoms = np.asarray(donor_weights.sum(axis=0)).ravel()
+            donor_valid = donor_denoms > 0
+            donor_counts_with_weight += donor_valid.astype(int)
+            for col_idx, value in enumerate(donor_denoms):
+                donor_weight_sums_by_col[col_idx].append(float(value))
+            donor_safe = np.where(donor_valid, donor_denoms, np.nan)
+            donor_mean = np.asarray((donor_weights.T @ cp10k[didx, :]).multiply(1 / donor_safe[:, None]).todense())
+            donor_pct = np.asarray((donor_weights.T @ detected[didx, :]).multiply(1 / donor_safe[:, None]).todense())
+            donor_mean_filled = np.where(np.isfinite(donor_mean), donor_mean, 0.0)
+            donor_pct_filled = np.where(np.isfinite(donor_pct), donor_pct, 0.0)
+            donor_balanced_mean_sum += donor_mean_filled
+            donor_balanced_pct_sum += donor_pct_filled
+            donor_balanced_count += donor_valid.astype(float)[:, None]
+            for col_idx, (state, weight_type) in enumerate(col_meta):
+                if not donor_valid[col_idx]:
+                    continue
+                for gidx, gene in enumerate(genes):
+                    if gene in query_genes:
+                        donor_level_rows.append(
+                            {
+                                "donor_id": donor,
+                                "expression_result_scope": parent,
+                                "state_name": state,
+                                "state_weight_type": weight_type,
+                                "gene": gene,
+                                "weighted_mean_cp10k": float(donor_mean[col_idx, gidx]),
+                                "log1p_weighted_mean_cp10k": float(np.log1p(donor_mean[col_idx, gidx])) if np.isfinite(donor_mean[col_idx, gidx]) else np.nan,
+                                "weighted_pct_detected": float(donor_pct[col_idx, gidx]),
+                                "sum_state_weight": float(donor_denoms[col_idx]),
+                            }
+                        )
 
-        for weight_type, weight_col in weight_specs:
-            weights = np.zeros(len(cells), dtype=float)
-            weights[positions] = pd.to_numeric(group[weight_col], errors="coerce").fillna(0.0).to_numpy(float)
-            state_mean = weighted_mean(cp10k, weights)
-            state_pct = weighted_pct(detected, weights)
-            donor_weighted = []
-            donor_weighted_pct = []
-            donor_weight_sums = []
-            for donor in donor_levels:
-                didx = parent_idx[donor_ids == donor]
-                dw = weights[didx]
-                donor_weight_sums.append(float(dw.sum()))
-                donor_weighted.append(weighted_mean(cp10k[didx, :], dw))
-                donor_weighted_pct.append(weighted_pct(detected[didx, :], dw))
-            donor_weighted = np.vstack(donor_weighted) if len(donor_weighted) else np.empty((0, len(genes)))
-            donor_weighted_pct = np.vstack(donor_weighted_pct) if len(donor_weighted_pct) else np.empty((0, len(genes)))
-            donor_balanced = np.nanmean(donor_weighted, axis=0) if donor_weighted.size else np.full(len(genes), np.nan)
-            donor_balanced_pct = np.nanmean(donor_weighted_pct, axis=0) if donor_weighted_pct.size else np.full(len(genes), np.nan)
+        for col_idx, (state, weight_type) in enumerate(col_meta):
+            meta = state_meta[state]
+            state_mean = state_means[col_idx, :]
+            state_second = state_seconds[col_idx, :]
+            state_pct = state_pcts[col_idx, :]
+            with np.errstate(invalid="ignore", divide="ignore"):
+                donor_balanced = donor_balanced_mean_sum[col_idx, :] / donor_balanced_count[col_idx, 0]
+                donor_balanced_pct = donor_balanced_pct_sum[col_idx, :] / donor_balanced_count[col_idx, 0]
             log2fc = np.log2((state_mean + args.pseudocount) / (parent_mean + args.pseudocount))
             low_mean = (state_mean < args.min_mean_for_log2fc) & (parent_mean < args.min_mean_for_log2fc)
             log2fc[low_mean] = np.nan
-            n_donors_with_weight = int(np.sum(np.asarray(donor_weight_sums) > 0))
-            median_cells = float(pd.Series(donor_ids).value_counts().median()) if len(donor_ids) else np.nan
-
+            specificity_z, specificity_p = weighted_vs_parent_p_values(
+                state_mean,
+                state_second,
+                parent_mean,
+                parent_second,
+                len(parent_idx),
+                float(eff_n_by_col[col_idx]),
+            )
             for gidx, gene in enumerate(genes):
                 if gene not in query_genes:
                     continue
-                rho, pval = (np.nan, np.nan)
-                if np.isfinite(weights).sum() > 2 and np.unique(weights).size > 1:
-                    rho, pval = stats.spearmanr(np.log1p(cp10k[:, gidx].toarray().ravel()), weights, nan_policy="omit")
                 marker_set = markers.get(state, set())
                 is_marker = gene in marker_set
-                loo_reason = "not_marker"
-                if is_marker:
-                    loo_reason = "all_gene_mode_not_recomputed"
+                loo_reason = "all_gene_mode_not_recomputed" if is_marker else "not_marker"
                 row = {
                     "gene": gene,
                     "state_name": state,
@@ -247,13 +344,14 @@ def main() -> None:
                     "log1p_mean_cp10k_all_parent": float(np.log1p(parent_mean[gidx])),
                     "pct_detected_all_parent": float(parent_pct[gidx]),
                     "log2fc_weighted_vs_all_parent": float(log2fc[gidx]) if np.isfinite(log2fc[gidx]) else np.nan,
-                    "p_value": float(pval) if np.isfinite(pval) else np.nan,
-                    "specificity_test": "spearman_log1p_cp10k_vs_state_weight",
-                    "spearman_rho": float(rho) if np.isfinite(rho) else np.nan,
+                    "p_value": float(specificity_p[gidx]) if np.isfinite(specificity_p[gidx]) else np.nan,
+                    "specificity_test": "weighted_vs_parent_mean_cp10k_normal_approximation_screening",
+                    "spearman_rho": np.nan,
+                    "specificity_z": float(specificity_z[gidx]) if np.isfinite(specificity_z[gidx]) else np.nan,
                     "n_cells": int(len(parent_idx)),
-                    "sum_state_weight": float(weights.sum()),
-                    "effective_n_cells": effective_n(weights),
-                    "n_donors_with_weight": n_donors_with_weight,
+                    "sum_state_weight": float(denom[col_idx]),
+                    "effective_n_cells": float(eff_n_by_col[col_idx]) if np.isfinite(eff_n_by_col[col_idx]) else np.nan,
+                    "n_donors_with_weight": int(donor_counts_with_weight[col_idx]),
                     "median_cells_per_donor": median_cells,
                     "state_class": meta.get("state_class", "unknown"),
                     "threshold_status": meta.get("threshold_status", "unknown"),
@@ -281,6 +379,7 @@ def main() -> None:
     write_table(expression, args.out_dir / "all_gene_state_expression_cp10k.tsv.gz")
     write_table(specificity, args.out_dir / "all_gene_state_specificity_cp10k.tsv.gz")
     write_table(expression, args.out_dir / "all_gene_state_expression_specificity_cp10k.tsv.gz")
+    write_table(pd.DataFrame(donor_level_rows), args.out_dir / "donor_state_weighted_expression_cp10k.tsv.gz")
     summary = {
         "raw_10x_dir": str(args.raw_10x_dir),
         "cell_state_activity": str(args.cell_state_activity),
@@ -289,7 +388,8 @@ def main() -> None:
         "n_states": int(activity["state_name"].nunique()),
         "weight_types": [x[0] for x in weight_specs],
         "expression_unit": "CP10K",
-        "specificity_test": "spearman_log1p_cp10k_vs_state_weight",
+        "specificity_test": "weighted_vs_parent_mean_cp10k_normal_approximation_screening",
+        "donor_state_weighted_expression": str(args.out_dir / "donor_state_weighted_expression_cp10k.tsv.gz"),
         "timestamp": datetime.now().isoformat(timespec="seconds"),
     }
     (args.out_dir / "state_expression_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")

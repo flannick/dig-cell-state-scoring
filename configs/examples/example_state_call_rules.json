@@ -1,0 +1,20 @@
+{
+  "states": [
+    {
+      "state": "tissue_a_cell_type_a_process_state",
+      "kind": "biological"
+    },
+    {
+      "state": "tissue_a_cell_type_a_composite_marker_high",
+      "kind": "biological",
+      "required_active": ["tissue_a_cell_type_a_identity_state"],
+      "confidence": "exploratory",
+      "requires_composite_validation": true
+    },
+    {
+      "state": "qc_ambient_tissue_a_high_expression",
+      "kind": "qc_flag",
+      "blocks_biological_calls": true
+    }
+  ]
+}

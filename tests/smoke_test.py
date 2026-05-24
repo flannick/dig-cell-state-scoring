@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pandas as pd
 from scipy import sparse
-from scipy.io import mmwrite
+from scipy.io import mmread, mmwrite
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,6 +19,118 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def run_cmd(args: list[str]) -> None:
     subprocess.run(args, check=True)
+
+
+def test_subset_10x_single_and_split_by(tmpdir: Path) -> None:
+    input_dir = tmpdir / "tenx"
+    input_dir.mkdir()
+    genes = ["G1", "G2", "G3"]
+    cells = ["c1", "c2", "c3", "c4"]
+    mat = sparse.csr_matrix(
+        [
+            [1, 0, 5, 0],
+            [2, 3, 0, 0],
+            [0, 4, 6, 7],
+        ],
+        dtype=float,
+    )
+    mmwrite(input_dir / "matrix.mtx", mat)
+    (input_dir / "features.tsv").write_text("\n".join(f"{g}\t{g}" for g in genes) + "\n", encoding="utf-8")
+    (input_dir / "barcodes.tsv").write_text("\n".join(cells) + "\n", encoding="utf-8")
+    pd.DataFrame({"cell_id": cells, "total_counts": [3, 7, 11, 7]}).to_csv(input_dir / "cell_total_counts.tsv", sep="\t", index=False)
+    metadata = pd.DataFrame(
+        {
+            "cell_id": cells,
+            "tissue": ["pancreas", "pancreas", "pancreas", "pancreas"],
+            "cell_type": ["type_a", "type_b", "type_a", "type_b"],
+        }
+    )
+    metadata_path = tmpdir / "subset_metadata.tsv"
+    metadata.to_csv(metadata_path, sep="\t", index=False)
+
+    single_out = tmpdir / "single_type_a"
+    run_cmd(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "subset_10x_by_metadata.py"),
+            "--input-10x-dir",
+            str(input_dir),
+            "--metadata",
+            str(metadata_path),
+            "--metadata-filter",
+            "cell_type=type_a",
+            "--out-dir",
+            str(single_out),
+        ]
+    )
+    single_matrix = mmread(single_out / "matrix.mtx.gz").tocsr()
+    assert single_matrix.shape == (3, 2)
+    assert single_matrix.nnz == 4
+    assert pd.read_csv(single_out / "barcodes.tsv.gz", sep="\t", header=None)[0].tolist() == ["c1", "c3"]
+
+    split_out = tmpdir / "split_by_type"
+    run_cmd(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "subset_10x_by_metadata.py"),
+            "--input-10x-dir",
+            str(input_dir),
+            "--metadata",
+            str(metadata_path),
+            "--metadata-filter",
+            "tissue=pancreas",
+            "--split-by",
+            "cell_type",
+            "--out-dir",
+            str(split_out),
+        ]
+    )
+    summary = pd.read_csv(split_out / "split_summary.tsv", sep="\t").set_index("cell_type")
+    assert summary.loc["type_a", "n_cells"] == 2
+    assert summary.loc["type_a", "nnz"] == 4
+    assert summary.loc["type_b", "n_cells"] == 2
+    assert summary.loc["type_b", "nnz"] == 3
+    assert (split_out / "type_a" / "matrix.mtx.gz").exists()
+    assert (split_out / "type_b" / "cell_total_counts.tsv.gz").exists()
+
+    nested_out = tmpdir / "split_by_tissue_type"
+    run_cmd(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "subset_10x_by_metadata.py"),
+            "--input-10x-dir",
+            str(input_dir),
+            "--metadata",
+            str(metadata_path),
+            "--split-by",
+            "tissue,cell_type",
+            "--out-dir",
+            str(nested_out),
+        ]
+    )
+    assert (nested_out / "pancreas" / "type_a" / "matrix.mtx.gz").exists()
+
+    input_dir_cells_by_genes = tmpdir / "tenx_cells_by_genes"
+    input_dir_cells_by_genes.mkdir()
+    mmwrite(input_dir_cells_by_genes / "matrix.mtx", mat.T)
+    (input_dir_cells_by_genes / "features.tsv").write_text("\n".join(f"{g}\t{g}" for g in genes) + "\n", encoding="utf-8")
+    (input_dir_cells_by_genes / "barcodes.tsv").write_text("\n".join(cells) + "\n", encoding="utf-8")
+    cells_by_genes_out = tmpdir / "split_cells_by_genes"
+    run_cmd(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "subset_10x_by_metadata.py"),
+            "--input-10x-dir",
+            str(input_dir_cells_by_genes),
+            "--metadata",
+            str(metadata_path),
+            "--split-by",
+            "cell_type",
+            "--out-dir",
+            str(cells_by_genes_out),
+        ]
+    )
+    assert mmread(cells_by_genes_out / "type_a" / "matrix.mtx.gz").tocsr().shape == (2, 3)
 
 
 def test_assign_states(tmpdir: Path) -> None:
@@ -428,9 +540,10 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
             "de_hard_assignments.tsv.gz",
             "state_summary.tsv.gz",
             "run_summary.json",
+            "timing_log.tsv",
         }
     )
-    assert expected.issubset({p.name for p in out_dir.iterdir()})
+    assert expected.issubset({Path(str(p)).name for p in out_dir.listdir()})
     scores = pd.read_csv(out_dir / "cell_state_scores.tsv.gz", sep="\t")
     assert {"markers_present", "markers_missing", "marker_coverage_fraction"}.issubset(scores.columns)
     assert scores["ucell_score"].notna().all()
@@ -472,8 +585,11 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
     assert set(hard_expr["gene"]) == {"G1", "G3"}
     run_summary = json.loads((out_dir / "run_summary.json").read_text(encoding="utf-8"))
     assert run_summary["parameters"]["n_query_genes"] == 2
+    assert run_summary["qc_metric_source"] == "full_sparse_counts"
+    assert any(row["step"] == "score_sparse_rank_universe_once" for row in run_summary["timing"])
+    assert pd.read_csv(out_dir / "timing_log.tsv", sep="\t")["step"].str.contains("write_outputs").any()
     qc = pd.read_csv(out_dir / "bad_cell_qc_flags.tsv.gz", sep="\t")
-    assert {"hard_exclusion_flag", "review_flag"}.issubset(qc.columns)
+    assert {"hard_exclusion_flag", "review_flag", "qc_metric_source"}.issubset(qc.columns)
     calls = pd.read_csv(out_dir / "cell_state_calls.tsv.gz", sep="\t")
     composite = calls.loc[calls["state_name"].str.contains("low_identity")]
     assert composite["requires_composite_validation"].all()
@@ -501,6 +617,9 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
     expr_spec = pd.read_csv(state_expr_dir / "all_gene_state_expression_specificity_cp10k.tsv.gz", sep="\t")
     assert {"gradient_percentile_squared", "high_tail_percentile_90_100"}.issubset(set(expr_spec["state_weight_type"]))
     assert {"weighted_mean_cp10k", "log1p_weighted_mean_cp10k", "q_value", "q_by_state", "q_by_gene"}.issubset(expr_spec.columns)
+    assert set(expr_spec["specificity_test"]) == {"weighted_vs_parent_mean_cp10k_normal_approximation_screening"}
+    donor_state = pd.read_csv(state_expr_dir / "donor_state_weighted_expression_cp10k.tsv.gz", sep="\t")
+    assert {"donor_id", "state_name", "state_weight_type", "gene", "log1p_weighted_mean_cp10k", "sum_state_weight"}.issubset(donor_state.columns)
     g1_parent = pd.read_csv(state_expr_dir / "all_gene_all_parent_cp10k.tsv.gz", sep="\t").set_index("gene").loc["G1"]
     assert g1_parent["mean_cp10k_all_parent"] > 0
 
@@ -536,6 +655,8 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
             str(gmt_out_dir / "gmt"),
             "--out-dir",
             str(pigean_dir),
+            "--pigean-command-template",
+            "{pigean} betas --gmt-in {gmt} --multi-y-in {multi_y} --out {out} {extra_args}",
             "--dry-run",
         ]
     )
@@ -556,6 +677,8 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
             str(metadata_path),
             "--cell-state-activity",
             str(out_dir / "cell_state_activity.tsv.gz"),
+            "--donor-state-expression",
+            str(state_expr_dir / "donor_state_weighted_expression_cp10k.tsv.gz"),
             "--phenotypes",
             str(phenotypes_path),
             "--genes",

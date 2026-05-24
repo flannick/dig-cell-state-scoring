@@ -32,6 +32,11 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--pigean-bin", default="")
     ap.add_argument("--pigean-command", default="")
+    ap.add_argument(
+        "--pigean-command-template",
+        default="",
+        help="Optional template using {pigean}, {gmt}, {multi_y}, {out}, {method}, and {extra_args}",
+    )
     ap.add_argument("--multi-y-input", default="")
     ap.add_argument("--traits", default="", help="Alias for --multi-y-input when the local PIGEAN command expects trait input")
     ap.add_argument("--gmt-dir", type=Path, default=Path(""))
@@ -66,9 +71,20 @@ def main() -> None:
         method_dir = args.out_dir / method
         method_dir.mkdir(parents=True, exist_ok=True)
         out_prefix = method_dir / "gene_set_stats.out.gz"
-        cmd = shlex.split(command) + ["betas", "--gmt-in", str(gmt_by_method[method]), "--multi-y-in", multi_y, "--out", str(out_prefix)]
-        if args.extra_args:
-            cmd.extend(shlex.split(args.extra_args))
+        if args.pigean_command_template:
+            rendered = args.pigean_command_template.format(
+                pigean=command,
+                gmt=str(gmt_by_method[method]),
+                multi_y=multi_y,
+                out=str(out_prefix),
+                method=method,
+                extra_args=args.extra_args,
+            )
+            cmd = shlex.split(rendered)
+        else:
+            cmd = shlex.split(command) + ["betas", "--gmt-in", str(gmt_by_method[method]), "--multi-y-in", multi_y, "--out", str(out_prefix)]
+            if args.extra_args:
+                cmd.extend(shlex.split(args.extra_args))
         cmd_text = " ".join(shlex.quote(x) for x in cmd)
         (method_dir / "run_command.txt").write_text(cmd_text + "\n", encoding="utf-8")
         run = {

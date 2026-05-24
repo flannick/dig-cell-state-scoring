@@ -1,8 +1,33 @@
 # `cell_state_de`
 
-Reusable scripts for assigning cells to marker-defined states and running donor-aware differential expression on single-cell maps.
+Reusable scripts for scoring marker-defined cell states, summarizing state-weighted expression, building state-derived GMTs, running PIGEAN multi-trait analyses, and fitting donor-level phenotype regressions on single-cell maps.
 
-The toolkit is intentionally map-agnostic. The interfaces are plain TSV plus JSON so the same scripts can be used after exporting selected genes and metadata from any Seurat or AnnData-style map.
+The toolkit is intentionally map-agnostic. The current production workflow is:
+
+1. `scripts/run_cmdkp_state_scoring.py`
+2. `scripts/summarize_state_expression.py`
+3. `scripts/make_state_expression_gmts.py`
+4. `scripts/run_pigean_multi_y_for_state_gmts.py`
+5. `scripts/run_state_phenotype_regression.py`
+
+Older selected-gene scripts remain for compatibility and small exploratory analyses, but they are not the recommended portal-scale workflow.
+
+## State Manifest
+
+For production runs, provide a state manifest with `--state-manifest` rather than relying only on state-name parsing. The manifest is a TSV keyed by `state_name`; recommended columns are:
+
+- `state_name`
+- `tissue`
+- `cell_type`
+- `state_label`
+- `state_class`
+- `is_composite_required`
+- `is_qc`
+- `allow_hard_call`
+- `score_scope`
+- `notes`
+
+State names may still follow `<tissue>_<cell_type>_<cell_state>` as a fallback. Unknown state classes default to continuous-only unless a manifest or YAML override explicitly supplies a hard-callable class or threshold.
 
 ## Selected-Gene Workflow
 
@@ -13,7 +38,7 @@ Run these commands from the analysis project root, not from inside this director
 ```bash
 R_LIBS_USER=../.Rlib /opt/homebrew/bin/Rscript --vanilla cell_state_de/scripts/extract_selected_expression_from_seurat.R \
   --rds data/external/example_map/example.rds \
-  --genes cell_state_de/configs/example_genes.txt \
+  --genes cell_state_de/configs/examples/example_genes.txt \
   --metadata-out cell_state_de/results/metadata.tsv.gz \
   --expression-out cell_state_de/results/expression_long.tsv.gz \
   --layer data
@@ -25,7 +50,7 @@ R_LIBS_USER=../.Rlib /opt/homebrew/bin/Rscript --vanilla cell_state_de/scripts/e
 ../.venv/bin/python cell_state_de/scripts/assign_cell_states.py \
   --metadata cell_state_de/results/metadata.tsv.gz \
   --expression cell_state_de/results/expression_long.tsv.gz \
-  --state-spec cell_state_de/configs/example_state_spec.json \
+  --state-spec cell_state_de/configs/examples/example_state_spec.json \
   --out cell_state_de/results/cell_state_membership.tsv.gz
 ```
 
@@ -36,13 +61,13 @@ R_LIBS_USER=../.Rlib /opt/homebrew/bin/Rscript --vanilla cell_state_de/scripts/e
   --metadata cell_state_de/results/metadata.tsv.gz \
   --expression cell_state_de/results/expression_long.tsv.gz \
   --states cell_state_de/results/cell_state_membership.tsv.gz \
-  --genes cell_state_de/configs/example_genes.txt \
-  --state mature_UCN3_MAFA_high \
+  --genes cell_state_de/configs/examples/example_genes.txt \
+  --state example_marker_high \
   --donor-col donor_id \
   --group-col disease_group \
-  --case T2D \
-  --control ND \
-  --out cell_state_de/results/mature_UCN3_MAFA_high_T2D_vs_ND.tsv
+  --case case \
+  --control control \
+  --out cell_state_de/results/example_marker_high_case_vs_control.tsv
 ```
 
 ## Interfaces
@@ -89,7 +114,7 @@ R_LIBS_USER=../.Rlib /opt/homebrew/bin/Rscript --vanilla cell_state_de/scripts/s
   --thresholds results/cell_state_de/example_state_thresholds.tsv.gz \
   --metadata results/cell_state_de/example_state_metadata.tsv.gz \
   --parent-cell-type-col cell_type \
-  --rules cell_state_de/configs/example_state_call_rules.json \
+  --rules cell_state_de/configs/examples/example_state_call_rules.json \
   --out results/cell_state_de/example_state_calls.tsv.gz \
   --annotation-out results/cell_state_de/example_cell_annotations.tsv.gz
 ```
@@ -227,6 +252,90 @@ R_LIBS_USER=../.Rlib /opt/homebrew/bin/Rscript --vanilla cell_state_de/scripts/e
   --min-detection 0.01
 ```
 
+### Running One Cell Type
+
+If you are processing one parent cell type, create one sparse 10x subset and
+use that subset for scoring, expression summaries, and DE:
+
+```bash
+../.venv/bin/python cell_state_de/scripts/subset_10x_by_metadata.py \
+  --input-10x-dir results/cell_state_de/full_rank_universe_10x \
+  --metadata results/cell_state_de/metadata.tsv.gz \
+  --metadata-filter tissue=tissue_a \
+  --metadata-filter cell_type=cell_type_a \
+  --out-dir results/cell_state_de/by_cell_type/cell_type_a/rank_10x
+
+../.venv/bin/python cell_state_de/scripts/run_cmdkp_state_scoring.py \
+  --rank-10x-dir results/cell_state_de/by_cell_type/cell_type_a/rank_10x \
+  --qc-raw-10x-dir results/cell_state_de/by_cell_type/cell_type_a/rank_10x \
+  --expression-matrix results/cell_state_de/query_gene_expression_long.tsv.gz \
+  --cell-metadata results/cell_state_de/metadata.tsv.gz \
+  --states-gmt results/cell_state_de/split_state_gmts/tissue_a/cell_type_a.gmt \
+  --qc-states-gmt results/cell_state_de/qc_signatures.gmt \
+  --parent-cell-filter cell_type=cell_type_a \
+  --out-dir results/cell_state_de/by_cell_type/cell_type_a/workflow
+
+../.venv/bin/python cell_state_de/scripts/summarize_state_expression.py \
+  --raw-10x-dir results/cell_state_de/by_cell_type/cell_type_a/rank_10x \
+  --cell-totals results/cell_state_de/by_cell_type/cell_type_a/rank_10x/cell_total_counts.tsv.gz \
+  --metadata results/cell_state_de/metadata.tsv.gz \
+  --cell-state-activity results/cell_state_de/by_cell_type/cell_type_a/workflow/cell_state_activity.tsv.gz \
+  --states-gmt results/cell_state_de/split_state_gmts/tissue_a/cell_type_a.gmt \
+  --parent-group-cols tissue,cell_type \
+  --out-dir results/cell_state_de/by_cell_type/cell_type_a/state_expression
+```
+
+This path reads the full rank-universe matrix once for that one subset.
+
+### Running Multiple Cell Types
+
+If you are processing all or many parent cell types, avoid running the
+single-subset command once per cell type. Use amortized batch splitting instead:
+
+```bash
+../.venv/bin/python cell_state_de/scripts/subset_10x_by_metadata.py \
+  --input-10x-dir results/cell_state_de/full_rank_universe_10x \
+  --metadata results/cell_state_de/metadata.tsv.gz \
+  --metadata-filter tissue=tissue_a \
+  --split-by tissue,cell_type \
+  --out-dir results/cell_state_de/by_cell_type_rank_10x
+```
+
+This streams the full `matrix.mtx.gz` once and writes one 10x directory per
+metadata group:
+
+```text
+results/cell_state_de/by_cell_type_rank_10x/tissue_a/cell_type_a/
+results/cell_state_de/by_cell_type_rank_10x/tissue_a/cell_type_b/
+results/cell_state_de/by_cell_type_rank_10x/tissue_a/cell_type_c/
+```
+
+The splitter writes `split_summary.tsv` at the batch output root with each
+group's output path, cell count, gene count, and sparse nonzero count. Use those
+group directories in the downstream loop:
+
+```bash
+while IFS=$'\t' read -r group_label out_dir n_genes n_cells nnz filters tissue cell_type; do
+  [ "$group_label" = "group_label" ] && continue
+  gmt="results/cell_state_de/split_state_gmts/${tissue}/${cell_type}.gmt"
+  [ -s "$gmt" ] || continue
+
+  ../.venv/bin/python cell_state_de/scripts/run_cmdkp_state_scoring.py \
+    --rank-10x-dir "$out_dir" \
+    --qc-raw-10x-dir "$out_dir" \
+    --expression-matrix results/cell_state_de/query_gene_expression_long.tsv.gz \
+    --cell-metadata results/cell_state_de/metadata.tsv.gz \
+    --states-gmt "$gmt" \
+    --qc-states-gmt results/cell_state_de/qc_signatures.gmt \
+    --parent-cell-filter "cell_type=${cell_type}" \
+    --out-dir "results/cell_state_de/by_cell_type/${cell_type}/workflow"
+done < results/cell_state_de/by_cell_type_rank_10x/split_summary.tsv
+```
+
+Use the same per-group `rank-10x-dir` for `summarize_state_expression.py` and
+`run_state_phenotype_regression.py`. The amortized mode removes repeated full
+Matrix Market reads; each downstream cell type analysis still runs separately.
+
 The runner computes two local rank-based scores:
 
 ```text
@@ -331,12 +440,14 @@ The script computes CP10K from total raw counts per cell, then writes:
 - `all_gene_state_expression_cp10k.tsv.gz`
 - `all_gene_state_specificity_cp10k.tsv.gz`
 - `all_gene_state_expression_specificity_cp10k.tsv.gz`
+- `donor_state_weighted_expression_cp10k.tsv.gz`
 - `state_expression_summary.json`
 
-The primary expression unit is CP10K plus `log1p(mean CP10K)`. Specificity is
-reported as a Spearman association between `log1p(CP10K)` and the state weight,
-with BH FDR columns. Rows from low-signal or composite-required states are kept
-and flagged rather than silently removed.
+The primary expression unit is CP10K plus `log1p(mean CP10K)`. The current
+specificity p-value is a scalable weighted-vs-parent normal-approximation
+screening statistic; it is intended for ranking and GMT construction, not as a
+donor-level inferential test. Rows from low-signal or composite-required states
+are kept and flagged rather than silently removed.
 
 Two non-exclusive state weights are used:
 
@@ -384,6 +495,13 @@ For each method, the wrapper writes `run_command.txt`, `run_summary.json`, and
 either PIGEAN outputs or a runnable `run_pigean.sh` if PIGEAN is unavailable or
 `--dry-run` is used.
 
+If a local PIGEAN installation uses different option names, use
+`--pigean-command-template`, for example:
+
+```bash
+--pigean-command-template "{pigean} betas --gmt-in {gmt} --multi-y-in {multi_y} --out {out} {extra_args}"
+```
+
 ## Donor Phenotype Regression
 
 Run donor-level models from sparse counts and cell-state activity:
@@ -393,6 +511,7 @@ Run donor-level models from sparse counts and cell-state activity:
   --raw-10x-dir results/cell_state_de/example_rank_universe_10x \
   --metadata results/cell_state_de/example_metadata.tsv.gz \
   --cell-state-activity results/cell_state_de/cmdkp_state_scoring/cell_state_activity.tsv.gz \
+  --donor-state-expression results/cell_state_de/state_expression/donor_state_weighted_expression_cp10k.tsv.gz \
   --phenotypes results/cell_state_de/example_phenotypes.tsv \
   --out-dir results/cell_state_de/state_de
 ```

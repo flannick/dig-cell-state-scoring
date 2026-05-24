@@ -55,8 +55,11 @@ Donor phenotype regression uses:
 \log(1 + y_{dgs}) \sim \mathrm{phenotype}_d + \mathrm{covariates}_d.
 \]
 
-Specificity summaries use a documented default Spearman association between
-\(\log(1+\mathrm{CP10K}_{ig})\) and the state activity weight. State-derived GMTs
-are built separately for curated markers, top absolute expression, top specific
-fold change, and top specificity significance so downstream PIGEAN analyses can
-be run by signature method without mixing marker definitions.
+Specificity summaries use a scalable weighted-vs-parent normal-approximation
+screening statistic comparing the state-weighted mean with the parent-cell-set
+mean. This statistic is intended for ranking and GMT construction; donor-level
+phenotype inference is performed separately from donor state-weighted summaries.
+State-derived GMTs are built separately for curated markers, top absolute
+expression, top specific fold change, and top specificity significance so
+downstream PIGEAN analyses can be run by signature method without mixing marker
+definitions.
