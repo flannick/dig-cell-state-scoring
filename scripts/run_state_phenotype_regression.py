@@ -11,6 +11,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import yaml
 from scipy import sparse, stats
 from scipy.io import mmread
 
@@ -25,6 +26,18 @@ def read_table(path: Path) -> pd.DataFrame:
 
 def write_table(frame: pd.DataFrame, path: Path) -> None:
     frame.to_csv(path, sep="\t", index=False, compression="infer")
+
+
+def load_phenotype_config(path: Path | None) -> dict[str, dict[str, object]]:
+    if not path:
+        return {}
+    with open(path, "r", encoding="utf-8") as handle:
+        data = yaml.safe_load(handle) or {}
+    if "phenotypes" in data and isinstance(data["phenotypes"], dict):
+        data = data["phenotypes"]
+    if not isinstance(data, dict):
+        raise SystemExit("--phenotype-config must be a YAML mapping or contain a phenotypes mapping")
+    return {str(key): (value or {}) for key, value in data.items()}
 
 
 def read_one_column(path: Path) -> list[str]:
@@ -114,51 +127,63 @@ def fit_lm(y: pd.Series, design: pd.DataFrame, phenotype: str) -> tuple[float, f
     return float(coef[idx]), float(p), len(frame), n_cases, n_controls, coef_col
 
 
-def prepare_design(design: pd.DataFrame, phenotype: str) -> tuple[pd.DataFrame, str, int, int]:
+def prepare_design(design: pd.DataFrame, phenotype: str, phenotype_config: dict[str, object] | None = None) -> tuple[pd.DataFrame, str, int, int, str]:
     x = design.copy()
+    phenotype_config = phenotype_config or {}
     if phenotype not in x.columns:
-        return pd.DataFrame(), "", 0, 0
-    if pd.api.types.is_numeric_dtype(x[phenotype]):
-        sd = x[phenotype].std(ddof=0)
-        if sd > 0:
+        return pd.DataFrame(), "", 0, 0, "missing"
+    configured_type = str(phenotype_config.get("type", "")).lower()
+    is_continuous = configured_type == "continuous" or (not configured_type and pd.api.types.is_numeric_dtype(x[phenotype]))
+    if is_continuous:
+        if phenotype_config.get("standardize", True):
+            sd = x[phenotype].std(ddof=0)
+        else:
+            sd = 0
+        if sd and sd > 0:
             x[phenotype] = (x[phenotype] - x[phenotype].mean()) / sd
         coef_col = phenotype
         n_cases = n_controls = 0
+        reference = "continuous_standardized" if phenotype_config.get("standardize", True) else "continuous_unstandardized"
     else:
         levels = sorted(x[phenotype].astype(str).unique())
         if len(levels) < 2:
-            return pd.DataFrame(), "", 0, 0
-        ref = levels[0]
+            return pd.DataFrame(), "", 0, 0, "single_level"
+        ref = str(phenotype_config.get("reference", levels[0]))
+        if ref not in levels:
+            raise SystemExit(f"Configured reference for phenotype {phenotype} is not present: {ref}")
+        levels = [ref] + [level for level in levels if level != ref]
         x[phenotype] = pd.Categorical(x[phenotype].astype(str), categories=levels)
         n_controls = int((x[phenotype].astype(str) == ref).sum())
         n_cases = int(len(x) - n_controls)
         coef_col = f"{phenotype}_{levels[1]}"
+        reference = ref
     x = pd.get_dummies(x, drop_first=True, dtype=float)
     x.insert(0, "intercept", 1.0)
     if coef_col not in x.columns:
         matches = [c for c in x.columns if c.startswith(phenotype + "_")]
         coef_col = matches[0] if matches else phenotype
     if coef_col not in x.columns:
-        return pd.DataFrame(), "", n_cases, n_controls
-    return x, coef_col, n_cases, n_controls
+        return pd.DataFrame(), "", n_cases, n_controls, reference
+    return x, coef_col, n_cases, n_controls, reference
 
 
-def fit_lm_matrix(y: pd.DataFrame, design: pd.DataFrame, phenotype: str) -> pd.DataFrame:
+def fit_lm_matrix(y: pd.DataFrame, design: pd.DataFrame, phenotype: str, phenotype_config: dict[str, object] | None = None) -> pd.DataFrame:
     frame = y.join(design, how="inner")
     y_cols = list(y.columns)
     frame = frame.dropna(subset=[phenotype]) if phenotype in frame.columns else frame.iloc[0:0]
     if len(frame) < 3 or phenotype not in frame.columns or frame[phenotype].nunique() < 2:
-        return pd.DataFrame({"gene": y_cols, "coefficient": np.nan, "p_value": np.nan, "n_donors": len(frame), "n_cases": 0, "n_controls": 0})
+        return pd.DataFrame({"gene": y_cols, "coefficient": np.nan, "p_value": np.nan, "n_donors": len(frame), "n_cases": 0, "n_controls": 0, "phenotype_reference": ""})
     y_mat = frame[y_cols].apply(pd.to_numeric, errors="coerce")
     keep = y_mat.notna().sum(axis=0) >= 3
     y_mat = y_mat.loc[:, keep]
-    out = pd.DataFrame({"gene": y_cols, "coefficient": np.nan, "p_value": np.nan, "n_donors": int(len(frame)), "n_cases": 0, "n_controls": 0}).set_index("gene")
+    out = pd.DataFrame({"gene": y_cols, "coefficient": np.nan, "p_value": np.nan, "n_donors": int(len(frame)), "n_cases": 0, "n_controls": 0, "phenotype_reference": ""}).set_index("gene")
     if y_mat.empty:
         return out.reset_index()
-    x, coef_col, n_cases, n_controls = prepare_design(frame[design.columns], phenotype)
+    x, coef_col, n_cases, n_controls, reference = prepare_design(frame[design.columns], phenotype, phenotype_config)
     if x.empty:
         out["n_cases"] = n_cases
         out["n_controls"] = n_controls
+        out["phenotype_reference"] = reference
         return out.reset_index()
     common = y_mat.index.intersection(x.index)
     X = x.loc[common].to_numpy(float)
@@ -186,6 +211,7 @@ def fit_lm_matrix(y: pd.DataFrame, design: pd.DataFrame, phenotype: str) -> pd.D
     out.loc[y_mat.columns, "n_donors"] = int(X.shape[0])
     out.loc[y_mat.columns, "n_cases"] = n_cases
     out.loc[y_mat.columns, "n_controls"] = n_controls
+    out.loc[y_mat.columns, "phenotype_reference"] = reference
     return out.reset_index()
 
 
@@ -227,6 +253,7 @@ def main() -> None:
     ap.add_argument("--covariates", default="")
     ap.add_argument("--donor-col", default="donor_id")
     ap.add_argument("--phenotype", default="")
+    ap.add_argument("--phenotype-config", type=Path, default=None)
     ap.add_argument("--out-dir", type=Path, required=True)
     args = ap.parse_args()
 
@@ -239,8 +266,9 @@ def main() -> None:
     genes = [all_genes[i] for i in gene_idx]
     metadata = read_table(args.metadata).drop_duplicates("cell_id")
     phenotypes = read_table(args.phenotypes).drop_duplicates(args.donor_col).set_index(args.donor_col)
+    phenotype_config = load_phenotype_config(args.phenotype_config)
     phenotype_cols = [args.phenotype] if args.phenotype else [c for c in phenotypes.columns if c not in set(args.covariates.split(","))]
-    phenotype_cols = [c for c in phenotype_cols if c]
+    phenotype_cols = [c for c in phenotype_cols if c and phenotype_config.get(c, {}).get("include", True)]
     covariates = [c for c in args.covariates.split(",") if c]
     activity = read_table(args.cell_state_activity)
     activity = activity.loc[activity["state_type"].eq("biological") & activity["cell_id"].isin(cells)].copy()
@@ -258,9 +286,9 @@ def main() -> None:
     parent_expr = donor_expression(cp10k, genes, gene_idx, metadata, cells, args.donor_col)
     for phenotype in phenotype_cols:
         design = phenotypes[[phenotype] + [c for c in covariates if c in phenotypes.columns]]
-        fit = fit_lm_matrix(parent_expr[genes], design.reindex(parent_expr.index), phenotype)
+        fit = fit_lm_matrix(parent_expr[genes], design.reindex(parent_expr.index), phenotype, phenotype_config.get(phenotype))
         for row in fit.to_dict("records"):
-            rows_parent.append({"gene": row["gene"], "state_name": "", "state_weight_type": "whole_parent", "phenotype": phenotype, "coefficient": row["coefficient"], "coefficient_units": "log1p_cp10k_per_standardized_phenotype_or_category", "p_value": row["p_value"], "n_donors": row["n_donors"], "n_cases": row["n_cases"], "n_controls": row["n_controls"], "model_formula": f"log1p_parent_cp10k ~ {phenotype}", "expression_unit_for_model": "log1p donor mean CP10K", "interpretation_scope": "whole_parent"})
+            rows_parent.append({"gene": row["gene"], "state_name": "", "state_weight_type": "whole_parent", "phenotype": phenotype, "coefficient": row["coefficient"], "coefficient_units": "log1p_cp10k_per_standardized_phenotype_or_category", "p_value": row["p_value"], "n_donors": row["n_donors"], "n_cases": row["n_cases"], "n_controls": row["n_controls"], "phenotype_reference": row.get("phenotype_reference", ""), "model_formula": f"log1p_parent_cp10k ~ {phenotype}", "expression_unit_for_model": "log1p donor mean CP10K", "interpretation_scope": "whole_parent"})
 
     state_rows = {"gradient_percentile_squared": [], "high_tail_percentile_90_100": []}
     contrast_rows = []
@@ -276,10 +304,10 @@ def main() -> None:
         contrast = expr[genes] - parent_expr.reindex(expr.index)[genes]
         for phenotype in phenotype_cols:
             design = phenotypes[[phenotype] + [c for c in covariates if c in phenotypes.columns]]
-            fit = fit_lm_matrix(expr[genes], design.reindex(expr.index), phenotype)
-            cfit = fit_lm_matrix(contrast[genes], design.reindex(contrast.index), phenotype).set_index("gene")
+            fit = fit_lm_matrix(expr[genes], design.reindex(expr.index), phenotype, phenotype_config.get(phenotype))
+            cfit = fit_lm_matrix(contrast[genes], design.reindex(contrast.index), phenotype, phenotype_config.get(phenotype)).set_index("gene")
             for row in fit.to_dict("records"):
-                out_row = {"gene": row["gene"], "state_name": state, "state_weight_type": weight_type, "phenotype": phenotype, "coefficient": row["coefficient"], "coefficient_units": "log1p_cp10k_per_standardized_phenotype_or_category", "p_value": row["p_value"], "n_donors": row["n_donors"], "n_cases": row["n_cases"], "n_controls": row["n_controls"], "model_formula": f"log1p_state_weighted_cp10k ~ {phenotype}", "expression_unit_for_model": "log1p donor state-weighted mean CP10K", "interpretation_scope": "state_weighted"}
+                out_row = {"gene": row["gene"], "state_name": state, "state_weight_type": weight_type, "phenotype": phenotype, "coefficient": row["coefficient"], "coefficient_units": "log1p_cp10k_per_standardized_phenotype_or_category", "p_value": row["p_value"], "n_donors": row["n_donors"], "n_cases": row["n_cases"], "n_controls": row["n_controls"], "phenotype_reference": row.get("phenotype_reference", ""), "model_formula": f"log1p_state_weighted_cp10k ~ {phenotype}", "expression_unit_for_model": "log1p donor state-weighted mean CP10K", "interpretation_scope": "state_weighted"}
                 state_rows.setdefault(weight_type, []).append(out_row)
                 crow = cfit.loc[row["gene"]]
                 contrast_rows.append({**out_row, "coefficient": crow["coefficient"], "p_value": crow["p_value"], "n_donors": crow["n_donors"], "n_cases": crow["n_cases"], "n_controls": crow["n_controls"], "model_formula": f"log1p_state_minus_parent_cp10k ~ {phenotype}", "interpretation_scope": "state_specific_contrast"})
@@ -295,10 +323,10 @@ def main() -> None:
             contrast = expr[genes] - parent_expr.reindex(expr.index)[genes]
             for phenotype in phenotype_cols:
                 design = phenotypes[[phenotype] + [c for c in covariates if c in phenotypes.columns]]
-                fit = fit_lm_matrix(expr[genes], design.reindex(expr.index), phenotype)
-                cfit = fit_lm_matrix(contrast[genes], design.reindex(contrast.index), phenotype).set_index("gene")
+                fit = fit_lm_matrix(expr[genes], design.reindex(expr.index), phenotype, phenotype_config.get(phenotype))
+                cfit = fit_lm_matrix(contrast[genes], design.reindex(contrast.index), phenotype, phenotype_config.get(phenotype)).set_index("gene")
                 for row in fit.to_dict("records"):
-                    out_row = {"gene": row["gene"], "state_name": state, "state_weight_type": weight_type, "phenotype": phenotype, "coefficient": row["coefficient"], "coefficient_units": "log1p_cp10k_per_standardized_phenotype_or_category", "p_value": row["p_value"], "n_donors": row["n_donors"], "n_cases": row["n_cases"], "n_controls": row["n_controls"], "model_formula": f"log1p_state_weighted_cp10k ~ {phenotype}", "expression_unit_for_model": "log1p donor state-weighted mean CP10K", "interpretation_scope": "state_weighted"}
+                    out_row = {"gene": row["gene"], "state_name": state, "state_weight_type": weight_type, "phenotype": phenotype, "coefficient": row["coefficient"], "coefficient_units": "log1p_cp10k_per_standardized_phenotype_or_category", "p_value": row["p_value"], "n_donors": row["n_donors"], "n_cases": row["n_cases"], "n_controls": row["n_controls"], "phenotype_reference": row.get("phenotype_reference", ""), "model_formula": f"log1p_state_weighted_cp10k ~ {phenotype}", "expression_unit_for_model": "log1p donor state-weighted mean CP10K", "interpretation_scope": "state_weighted"}
                     state_rows[weight_type].append(out_row)
                     crow = cfit.loc[row["gene"]]
                     contrast_rows.append({**out_row, "coefficient": crow["coefficient"], "p_value": crow["p_value"], "n_donors": crow["n_donors"], "n_cases": crow["n_cases"], "n_controls": crow["n_controls"], "model_formula": f"log1p_state_minus_parent_cp10k ~ {phenotype}", "interpretation_scope": "state_specific_contrast"})
@@ -311,7 +339,7 @@ def main() -> None:
     write_table(grad, args.out_dir / "de_state_weighted_gradient.tsv.gz")
     write_table(tail, args.out_dir / "de_state_weighted_hightail.tsv.gz")
     write_table(contrast, args.out_dir / "de_state_specific_contrast.tsv.gz")
-    summary = {"n_genes": len(genes), "n_states": int(activity["state_name"].nunique()), "phenotypes": phenotype_cols, "covariates": covariates, "donor_state_expression": str(args.donor_state_expression) if args.donor_state_expression else None, "timestamp": datetime.now().isoformat(timespec="seconds")}
+    summary = {"n_genes": len(genes), "n_states": int(activity["state_name"].nunique()), "phenotypes": phenotype_cols, "covariates": covariates, "phenotype_config": str(args.phenotype_config) if args.phenotype_config else None, "donor_state_expression": str(args.donor_state_expression) if args.donor_state_expression else None, "timestamp": datetime.now().isoformat(timespec="seconds")}
     (args.out_dir / "de_run_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
 

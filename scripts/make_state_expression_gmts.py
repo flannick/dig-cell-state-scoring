@@ -81,15 +81,28 @@ def make_rows(frame: pd.DataFrame, method: str, args: argparse.Namespace) -> tup
     work["specific_logp"] = -np.log10(p_for_log)
     work["combined_score"] = pd.to_numeric(work.get("log2fc_weighted_vs_all_parent"), errors="coerce").fillna(0) * work["specific_logp"].fillna(0)
     metric, ascending = metric_map[method]
-    for state, group in work.groupby("state_name", sort=False):
+    parent_cols = [col for col in ["map_id", "tissue", "annotated_cell_type"] if col in work.columns]
+    group_cols = parent_cols + ["state_name"]
+    for key, group in work.groupby(group_cols, sort=False):
+        if isinstance(key, tuple):
+            parent_values = key[:-1]
+            state = key[-1]
+        else:
+            parent_values = ()
+            state = key
         group = group.sort_values(metric, ascending=ascending).head(args.top_n)
-        name = f"{safe_name(state)}__{method}__top{args.top_n}"
+        parent_prefix = "__".join(safe_name(value) for value in parent_values if str(value))
+        state_prefix = f"{parent_prefix}__{safe_name(state)}" if parent_prefix else safe_name(state)
+        name = f"{state_prefix}__{method}__top{args.top_n}"
         genes = group["gene"].astype(str).tolist()
         rows.append([name, f"{method} top {args.top_n} for {state}", *genes])
         for rank, (_, row) in enumerate(group.iterrows(), 1):
             membership.append(
                 {
                     "gene_set": name,
+                    "map_id": row.get("map_id", ""),
+                    "tissue": row.get("tissue", ""),
+                    "annotated_cell_type": row.get("annotated_cell_type", ""),
                     "state_name": state,
                     "signature_method": method,
                     "rank": rank,
@@ -125,7 +138,7 @@ def main() -> None:
     original = [[safe_name(row[0]), row[1], *row[2:]] for row in read_gmt(args.original_state_gmt)]
     write_gmt(original, gmt_dir / "original_markers.gmt")
     membership = [
-        {"gene_set": row[0], "state_name": row[0], "signature_method": "original_markers", "rank": i, "gene": gene, "selection_metric": "curated_marker", "selection_value": np.nan, "state_weight_type": ""}
+        {"gene_set": row[0], "map_id": "", "tissue": "", "annotated_cell_type": "", "state_name": row[0], "signature_method": "original_markers", "rank": i, "gene": gene, "selection_metric": "curated_marker", "selection_value": np.nan, "state_weight_type": ""}
         for row in original
         for i, gene in enumerate(row[2:], 1)
     ]

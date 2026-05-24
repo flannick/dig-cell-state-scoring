@@ -514,6 +514,8 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
             "0",
             "--allow-acceptance-failures",
             "--allow-small-rank-universe",
+            "--legacy-selected-gene-summaries",
+            "write",
         ]
     )
 
@@ -665,7 +667,9 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
 
     phenotypes = pd.DataFrame({"donor_id": ["d1", "d2", "d3"], "case_status": ["case", "control", "case"]})
     phenotypes_path = tmpdir / "phenotypes.tsv"
+    phenotype_config_path = tmpdir / "phenotype_config.yaml"
     phenotypes.to_csv(phenotypes_path, sep="\t", index=False)
+    phenotype_config_path.write_text("phenotypes:\n  case_status:\n    type: categorical\n    reference: control\n", encoding="utf-8")
     de_dir = tmpdir / "state_de"
     run_cmd(
         [
@@ -681,6 +685,8 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
             str(state_expr_dir / "donor_state_weighted_expression_cp10k.tsv.gz"),
             "--phenotypes",
             str(phenotypes_path),
+            "--phenotype-config",
+            str(phenotype_config_path),
             "--genes",
             str(query_genes_path),
             "--out-dir",
@@ -688,7 +694,8 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
         ]
     )
     de_parent = pd.read_csv(de_dir / "de_whole_parent.tsv.gz", sep="\t")
-    assert {"coefficient_units", "q_global", "q_by_trait", "q_by_gene"}.issubset(de_parent.columns)
+    assert {"coefficient_units", "q_global", "q_by_trait", "q_by_gene", "phenotype_reference"}.issubset(de_parent.columns)
+    assert set(de_parent["phenotype_reference"].dropna()) == {"control"}
 
     run_cmd(
         [
@@ -761,6 +768,85 @@ def test_assign_genes_to_states(tmpdir: Path) -> None:
     assert not bool(de_assigned.loc["G4", "assignment_pass"])
 
 
+def test_manifest_splitter_and_batch_dry_run(tmpdir: Path) -> None:
+    gmt_path = tmpdir / "states.gmt"
+    manifest_path = tmpdir / "state_manifest.tsv"
+    metadata_path = tmpdir / "metadata.tsv"
+    config_path = tmpdir / "workflow.yaml"
+    out_split = tmpdir / "split_gmts"
+    out_workflow = tmpdir / "workflow_out"
+    gmt_path.write_text(
+        "state_a\ttoy\tG1\tG2\nstate_b\ttoy\tG3\tG4\n",
+        encoding="utf-8",
+    )
+    pd.DataFrame(
+        {
+            "state_name": ["state_a", "state_b"],
+            "tissue": ["tissue_a", "tissue_a"],
+            "cell_type": ["cell_type_a", "cell_type_b"],
+            "state_class": ["process_gradient", "process_gradient"],
+            "is_composite_required": [False, False],
+        }
+    ).to_csv(manifest_path, sep="\t", index=False)
+    pd.DataFrame(
+        {
+            "cell_id": ["c1", "c2"],
+            "tissue": ["tissue_a", "tissue_a"],
+            "cell_type": ["cell_type_a", "cell_type_b"],
+            "map_id": ["map1", "map1"],
+            "donor_id": ["d1", "d2"],
+        }
+    ).to_csv(metadata_path, sep="\t", index=False)
+
+    run_cmd(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "split_gmt_by_manifest.py"),
+            "--gmt",
+            str(gmt_path),
+            "--state-manifest",
+            str(manifest_path),
+            "--out-dir",
+            str(out_split),
+            "--require-all-states",
+        ]
+    )
+    split_manifest = pd.read_csv(out_split / "split_gmt_manifest.tsv", sep="\t")
+    assert set(split_manifest["cell_type"]) == {"cell_type_a", "cell_type_b"}
+    assert (out_split / "tissue_a" / "cell_type_a.gmt").exists()
+
+    config_path.write_text(
+        "\n".join(
+            [
+                f"metadata: {metadata_path}",
+                f"rank_10x_dir: {tmpdir / 'rank_10x'}",
+                f"raw_10x_dir: {tmpdir / 'raw_10x'}",
+                f"expression_matrix: {tmpdir / 'expression.tsv'}",
+                f"states_gmt: {gmt_path}",
+                f"state_manifest: {manifest_path}",
+                f"out_dir: {out_workflow}",
+                "split_by: [tissue, cell_type]",
+                "dry_run: true",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    run_cmd(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "run_all_cell_state_workflow.py"),
+            "--config",
+            str(config_path),
+            "--dry-run",
+        ]
+    )
+    commands = pd.read_csv(out_workflow / "command_manifest.tsv", sep="\t")
+    assert commands["command"].str.contains("--require-state-manifest").any()
+    assert commands["command"].str.contains("run_cmdkp_state_scoring.py").any()
+    assert pd.read_csv(out_workflow / "group_manifest.tsv", sep="\t").shape[0] == 2
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         tmpdir = Path(tmp)
@@ -770,6 +856,7 @@ def main() -> None:
         test_call_states_from_scores(tmpdir)
         test_cmdkp_general_runner(tmpdir)
         test_assign_genes_to_states(tmpdir)
+        test_manifest_splitter_and_batch_dry_run(tmpdir)
     print("smoke tests OK")
 
 

@@ -252,16 +252,21 @@ def resolve_query_genes(args: argparse.Namespace, matrix: pd.DataFrame) -> list[
 def apply_metadata_filter(metadata: pd.DataFrame, filter_expr: str) -> pd.DataFrame:
     if not filter_expr:
         return metadata
-    if "=" not in filter_expr:
-        raise SystemExit("--parent-cell-filter must have form column=value1,value2")
-    column, values = filter_expr.split("=", 1)
-    column = column.strip()
-    allowed = {value.strip() for value in values.split(",") if value.strip()}
-    if column not in metadata.columns:
-        raise SystemExit(f"--parent-cell-filter column not found in metadata: {column}")
-    if not allowed:
-        raise SystemExit("--parent-cell-filter did not include any values")
-    out = metadata.loc[metadata[column].astype(str).isin(allowed)].copy()
+    keep = pd.Series(True, index=metadata.index)
+    for term in filter_expr.split(";"):
+        if not term:
+            continue
+        if "=" not in term:
+            raise SystemExit("--parent-cell-filter must have form column=value1,value2 or semicolon-separated filters")
+        column, values = term.split("=", 1)
+        column = column.strip()
+        allowed = {value.strip() for value in values.split(",") if value.strip()}
+        if column not in metadata.columns:
+            raise SystemExit(f"--parent-cell-filter column not found in metadata: {column}")
+        if not allowed:
+            raise SystemExit("--parent-cell-filter did not include any values")
+        keep &= metadata[column].astype(str).isin(allowed)
+    out = metadata.loc[keep].copy()
     if out.empty:
         raise SystemExit("--parent-cell-filter removed all metadata rows")
     return out
@@ -326,6 +331,32 @@ def load_state_manifest(path: str) -> dict[str, dict[str, object]]:
             values[col] = str(values[col]).strip().lower() in {"1", "true", "yes", "y"}
         manifest[str(values["state_name"])] = values
     return manifest
+
+
+def validate_state_manifest(
+    manifest: dict[str, dict[str, object]],
+    gene_sets: list[GeneSet],
+    require: bool = False,
+) -> None:
+    if not require:
+        return
+    required_cols = {"state_name", "tissue", "cell_type", "state_class", "is_composite_required"}
+    if not manifest:
+        raise SystemExit("--require-state-manifest was set but no --state-manifest was supplied")
+    missing_states = [gene_set.name for gene_set in gene_sets if gene_set.name not in manifest]
+    if missing_states:
+        preview = ", ".join(missing_states[:10])
+        suffix = "..." if len(missing_states) > 10 else ""
+        raise SystemExit(f"State manifest is missing {len(missing_states)} GMT state(s): {preview}{suffix}")
+    bad_rows = []
+    for state_name, row in manifest.items():
+        missing = [col for col in required_cols if col == "state_name" and not state_name or col != "state_name" and col not in row]
+        if missing:
+            bad_rows.append(f"{state_name}: {','.join(missing)}")
+    if bad_rows:
+        preview = "; ".join(bad_rows[:10])
+        suffix = "..." if len(bad_rows) > 10 else ""
+        raise SystemExit(f"State manifest rows are missing required production columns: {preview}{suffix}")
 
 
 def apply_state_manifest(gene_sets: list[GeneSet], manifest: dict[str, dict[str, object]]) -> list[GeneSet]:
@@ -523,8 +554,12 @@ def sparse_rank_scores_for_gene_sets(
         vals = universe.matrix.data[start:end]
         if len(cols) == 0:
             continue
-        order = np.lexsort((cols, -vals))
-        for rank, col in enumerate(cols[order][:top_rank], start=1):
+        if len(cols) > top_rank:
+            top_unsorted = np.argpartition(-vals, top_rank - 1)[:top_rank]
+            order = top_unsorted[np.lexsort((cols[top_unsorted], -vals[top_unsorted]))]
+        else:
+            order = np.lexsort((cols, -vals))
+        for rank, col in enumerate(cols[order], start=1):
             for set_name in pos_to_sets.get(col, []):
                 if rank <= auc_max_rank:
                     auc_values[set_name][cell_idx] += auc_max_rank - rank + 1
@@ -856,7 +891,7 @@ def qc_metrics(matrix: pd.DataFrame, metadata: pd.DataFrame, qc_scores: pd.DataF
                 reasons[cell].append(label)
 
     high_qc = qc_scores.loc[qc_scores["score_percentile_within_sample"] >= args.qc_extreme_percentile].copy()
-    hard_qc = high_qc["qc_tier"].str.contains("hard_exclude", na=False)
+    hard_qc = high_qc["qc_tier"].str.contains("hard_exclude", na=False) & bool(getattr(args, "allow_qc_signature_hard_exclusion", False))
     review_qc = high_qc["qc_tier"].str.contains("review", na=False)
     hard_cells = set(high_qc.loc[hard_qc, "cell_id"])
     review_cells = set(high_qc.loc[review_qc, "cell_id"])
@@ -1221,9 +1256,15 @@ def hard_assignments_from_activity(
         ],
         default="activity_below_threshold",
     )
+    for col in ["map_id", "tissue", "annotated_cell_type"]:
+        if col not in frame.columns:
+            frame[col] = ""
     return frame[
         [
             "cell_id",
+            "map_id",
+            "tissue",
+            "annotated_cell_type",
             "state_type",
             "state_name",
             "aucell_score",
@@ -1772,6 +1813,7 @@ def main() -> None:
     parser.add_argument("--qc-gmt", default="")
     parser.add_argument("--qc-states-gmt", default="", help="Alias for --qc-gmt")
     parser.add_argument("--state-manifest", default="", help="Optional TSV with state_name, tissue, cell_type, state_class, and related metadata")
+    parser.add_argument("--require-state-manifest", action="store_true", help="Fail unless every GMT state has production manifest metadata")
     parser.add_argument("--qc-raw-10x-dir", default="", help="Optional full raw 10x counts for direct QC metrics; defaults to --rank-10x-dir when available")
     parser.add_argument("--out-dir", default="")
     parser.add_argument("--expression-kind", choices=["raw_counts", "log1p_normalized"], default="log1p_normalized")
@@ -1806,6 +1848,8 @@ def main() -> None:
     parser.add_argument("--min-calibration-cells", type=int, default=100)
     parser.add_argument("--min-score-iqr", type=float, default=0.01)
     parser.add_argument("--qc-extreme-percentile", type=float, default=0.99)
+    parser.add_argument("--allow-qc-signature-hard-exclusion", action="store_true", help="Allow QC signature percentile tails to set hard_exclusion_flag; otherwise signature tails are review diagnostics only")
+    parser.add_argument("--legacy-selected-gene-summaries", choices=["skip", "write"], default="skip", help="Write compatibility selected-gene expression/de summaries from this runner")
     parser.add_argument("--min-rank-genes", type=int, default=5000)
     parser.add_argument("--allow-small-rank-universe", action="store_true")
     parser.add_argument("--parent-cell-filter", default="", help="Metadata filter expression column=value1,value2 applied before scoring")
@@ -1903,7 +1947,9 @@ def main() -> None:
     ucell_ranks = rank_matrix_for_ucell(matrix, args.max_rank) if rank_universe is None else pd.DataFrame(index=matrix.index)
     aucell_ranks = rank_matrix_for_aucell(matrix) if rank_universe is None else pd.DataFrame(index=matrix.index)
 
-    biological_sets = apply_state_manifest(read_gmt(args.biological_gmt), state_manifest)
+    raw_biological_sets = read_gmt(args.biological_gmt)
+    validate_state_manifest(state_manifest, raw_biological_sets, args.require_state_manifest)
+    biological_sets = apply_state_manifest(raw_biological_sets, state_manifest)
     qc_sets = apply_state_manifest(read_gmt(args.qc_gmt), state_manifest) if args.qc_gmt and Path(args.qc_gmt).exists() else []
     combined_sparse_scores = None
     if rank_universe is not None:
@@ -1944,27 +1990,34 @@ def main() -> None:
     qc_review = qc_signature_review_flags(activity, args)
     qc_legacy = qc_legacy_fixed_tail_flags(activity, args)
     timer.mark("compute_activity_and_qc", n_activity_rows=len(activity))
-    expression_expected = expected_expression_summary(matrix, activity, {s.name: s for s in biological_sets}, aucell_ranks, rank_universe, args, query_genes)
-    expression_hard = hard_expression_summary(matrix, hard, args, query_genes)
-    phenotypes = read_table(args.phenotypes) if args.phenotypes else None
-    de_expected, de_hard = de_summaries(matrix, metadata, activity, hard, phenotypes, args, query_genes)
-    timer.mark("legacy_selected_gene_summaries", n_expected_rows=len(expression_expected), n_hard_rows=len(expression_hard))
+    if args.legacy_selected_gene_summaries == "write":
+        expression_expected = expected_expression_summary(matrix, activity, {s.name: s for s in biological_sets}, aucell_ranks, rank_universe, args, query_genes)
+        expression_hard = hard_expression_summary(matrix, hard, args, query_genes)
+        phenotypes = read_table(args.phenotypes) if args.phenotypes else None
+        de_expected, de_hard = de_summaries(matrix, metadata, activity, hard, phenotypes, args, query_genes)
+    else:
+        expression_expected = empty_table(EXPECTED_EXPRESSION_COLUMNS)
+        expression_hard = empty_table(HARD_EXPRESSION_COLUMNS)
+        de_expected = empty_table(["gene", "state_name", "phenotype", "coefficient", "coefficient_units", "p_value", "q_global", "q_by_trait", "q_by_gene", "n_donors", "sum_state_weight", "model_formula"])
+        de_hard = empty_table(["gene", "state_name", "phenotype", "coefficient", "coefficient_units", "p_value", "q_global", "q_by_trait", "q_by_gene", "n_donors", "n_state_positive_cells", "model_formula"])
+    timer.mark("legacy_selected_gene_summaries", mode=args.legacy_selected_gene_summaries, n_expected_rows=len(expression_expected), n_hard_rows=len(expression_hard))
 
     calls = call_states(biological_scores, thresholds, bad_flags, args)
     multilabel = multilabel_summary(calls, bad_flags)
     summary = state_call_summary(calls, metadata, thresholds, args)
-    state_summary = activity.groupby(["state_type", "state_name"], sort=False).agg(
+    state_summary_keys = ["map_id", "tissue", "annotated_cell_type", "state_type", "state_name"]
+    state_summary = activity.groupby(state_summary_keys, sort=False).agg(
         n_cells_scored=("cell_id", "nunique"),
         mean_ucell_score=("ucell_score", "mean"),
         mean_aucell_score=("aucell_score", "mean"),
         mean_activity_weight=("state_activity_weight", "mean"),
         marker_coverage_fraction=("marker_coverage_fraction", "first"),
     ).reset_index()
-    hard_counts = hard.groupby(["state_type", "state_name"], sort=False).agg(
+    hard_counts = hard.groupby(state_summary_keys, sort=False).agg(
         n_hard_assigned=("hard_call", "sum"),
         threshold=("threshold", "first"),
     ).reset_index()
-    state_summary = state_summary.merge(hard_counts, on=["state_type", "state_name"], how="left")
+    state_summary = state_summary.merge(hard_counts, on=state_summary_keys, how="left")
     state_summary["hard_assigned_fraction"] = state_summary["n_hard_assigned"] / state_summary["n_cells_scored"]
     failures = acceptance_checks(summary, biological_scores, qc_scores, calls)
     timer.mark("build_calls_and_summaries", n_failures=len(failures))
@@ -1980,7 +2033,10 @@ def main() -> None:
         aucell_state_activity[["cell_id", "state_name", "aucell_score", "threshold_status", "hard_call", "state_activity_weight"]],
         output_path(args, "aucell_state_activity_out", "aucell_state_activity.tsv.gz"),
     )
-    activity_cols = ["cell_id", "state_type", "state_name", "aucell_score", "ucell_score", "aucell_percentile_within_group", "state_activity_weight", "state_activity_weight_gradient", "state_activity_weight_hightail", "state_class", "soft_weight_method", "threshold_value", "threshold_status", "threshold_reason", "threshold_method", "q50_score", "q75_score", "q90_score_diagnostic", "q95_score_diagnostic", "q99_score", "n_markers_present", "n_markers_total", "marker_coverage_fraction"]
+    activity_cols = ["cell_id", "map_id", "tissue", "annotated_cell_type", "state_type", "state_name", "aucell_score", "ucell_score", "aucell_percentile_within_group", "state_activity_weight", "state_activity_weight_gradient", "state_activity_weight_hightail", "state_class", "soft_weight_method", "threshold_value", "threshold_status", "threshold_reason", "threshold_method", "q50_score", "q75_score", "q90_score_diagnostic", "q95_score_diagnostic", "q99_score", "n_markers_present", "n_markers_total", "marker_coverage_fraction"]
+    for col in activity_cols:
+        if col not in activity.columns:
+            activity[col] = ""
     write_table(activity[activity_cols], output_path(args, "cell_state_activity_out", "cell_state_activity.tsv.gz"))
     write_table(hard, output_path(args, "cell_state_hard_assignments_out", "cell_state_hard_assignments.tsv.gz"))
     write_table(exclusions, output_path(args, "qc_exclusions_out", "qc_exclusions.tsv.gz"))
@@ -1992,7 +2048,7 @@ def main() -> None:
     write_table(expression_hard, output_path(args, "expression_hard_assignments_out", "expression_hard_assignments.tsv.gz"))
     write_table(de_expected, output_path(args, "de_expected_assignments_out", "de_expected_assignments.tsv.gz"))
     write_table(de_hard, output_path(args, "de_hard_assignments_out", "de_hard_assignments.tsv.gz"))
-    write_table(state_summary[["state_type", "state_name", "n_cells_scored", "mean_ucell_score", "mean_aucell_score", "mean_activity_weight", "n_hard_assigned", "hard_assigned_fraction", "marker_coverage_fraction", "threshold"]], output_path(args, "state_summary_out", "state_summary.tsv.gz"))
+    write_table(state_summary[["map_id", "tissue", "annotated_cell_type", "state_type", "state_name", "n_cells_scored", "mean_ucell_score", "mean_aucell_score", "mean_activity_weight", "n_hard_assigned", "hard_assigned_fraction", "marker_coverage_fraction", "threshold"]], output_path(args, "state_summary_out", "state_summary.tsv.gz"))
     write_table(biological_scores.drop(columns=["scope_tissue", "scope_cell_type", "state_kind", "is_composite_state"]), out_dir / "cell_state_scores.tsv.gz")
     write_table(thresholds, out_dir / "cell_state_thresholds.tsv.gz")
     write_table(calls.drop(columns=["state_kind"]), out_dir / "cell_state_calls.tsv.gz")
@@ -2028,6 +2084,9 @@ def main() -> None:
             "default_qc_threshold": args.default_qc_threshold,
             "leave_one_gene_out": args.leave_one_gene_out,
             "exclude_qc_above": args.exclude_qc_above,
+            "allow_qc_signature_hard_exclusion": args.allow_qc_signature_hard_exclusion,
+            "legacy_selected_gene_summaries": args.legacy_selected_gene_summaries,
+            "require_state_manifest": args.require_state_manifest,
         },
         "n_cells": int(matrix.shape[0]),
         "n_genes": int(matrix.shape[1]),

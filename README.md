@@ -4,13 +4,67 @@ Reusable scripts for scoring marker-defined cell states, summarizing state-weigh
 
 The toolkit is intentionally map-agnostic. The current production workflow is:
 
-1. `scripts/run_cmdkp_state_scoring.py`
-2. `scripts/summarize_state_expression.py`
-3. `scripts/make_state_expression_gmts.py`
-4. `scripts/run_pigean_multi_y_for_state_gmts.py`
-5. `scripts/run_state_phenotype_regression.py`
+1. `scripts/run_all_cell_state_workflow.py` for config-driven multi-group runs, or the individual scripts below for one group.
+2. `scripts/run_cmdkp_state_scoring.py`
+3. `scripts/summarize_state_expression.py`
+4. `scripts/make_state_expression_gmts.py`
+5. `scripts/run_pigean_multi_y_for_state_gmts.py`
+6. `scripts/run_state_phenotype_regression.py`
 
 Older selected-gene scripts remain for compatibility and small exploratory analyses, but they are not the recommended portal-scale workflow.
+
+## Production Quick Start
+
+For one tissue/cell-type group, run the individual scripts with a full sparse rank universe and a group-specific GMT:
+
+```bash
+../.venv/bin/python cell_state_de/scripts/run_cmdkp_state_scoring.py \
+  --rank-10x-dir results/cell_state_de/by_group/tissue_a/cell_type_a \
+  --qc-raw-10x-dir results/cell_state_de/by_group/tissue_a/cell_type_a \
+  --expression-matrix results/cell_state_de/query_gene_expression_long.tsv.gz \
+  --cell-metadata results/cell_state_de/metadata.tsv.gz \
+  --states-gmt results/cell_state_de/state_gmts/tissue_a/cell_type_a.gmt \
+  --qc-states-gmt results/cell_state_de/qc_signatures.gmt \
+  --state-manifest results/cell_state_de/state_manifest.tsv \
+  --require-state-manifest \
+  --parent-cell-filter 'tissue=tissue_a;cell_type=cell_type_a' \
+  --out-dir results/cell_state_de/by_group/tissue_a/cell_type_a/workflow
+```
+
+Then summarize all-gene CP10K expression:
+
+```bash
+../.venv/bin/python cell_state_de/scripts/summarize_state_expression.py \
+  --raw-10x-dir results/cell_state_de/by_group/tissue_a/cell_type_a \
+  --metadata results/cell_state_de/metadata.tsv.gz \
+  --cell-state-activity results/cell_state_de/by_group/tissue_a/cell_type_a/workflow/cell_state_activity.tsv.gz \
+  --states-gmt results/cell_state_de/state_gmts/tissue_a/cell_type_a.gmt \
+  --out-dir results/cell_state_de/by_group/tissue_a/cell_type_a/expression
+```
+
+For many tissues/cell types, use one YAML config instead of hand-written shell loops:
+
+```yaml
+metadata: results/cell_state_de/metadata.tsv.gz
+rank_10x_dir: results/cell_state_de/full_rank_10x
+raw_10x_dir: results/cell_state_de/full_raw_10x
+expression_matrix: results/cell_state_de/query_gene_expression_long.tsv.gz
+states_gmt: results/cell_state_de/all_states.gmt
+state_manifest: results/cell_state_de/state_manifest.tsv
+qc_gmt: results/cell_state_de/qc_signatures.gmt
+phenotypes: results/cell_state_de/donor_phenotypes.tsv
+phenotype_config: results/cell_state_de/phenotype_config.yaml
+split_by: [tissue, cell_type]
+out_dir: results/cell_state_de/production_run
+output_format: tsv
+```
+
+```bash
+../.venv/bin/python cell_state_de/scripts/run_all_cell_state_workflow.py \
+  --config results/cell_state_de/workflow.yaml
+```
+
+Use `--dry-run` first to write the planned commands, group manifest, and timing scaffold without executing the workflow.
 
 ## State Manifest
 
@@ -28,6 +82,22 @@ For production runs, provide a state manifest with `--state-manifest` rather tha
 - `notes`
 
 State names may still follow `<tissue>_<cell_type>_<cell_state>` as a fallback. Unknown state classes default to continuous-only unless a manifest or YAML override explicitly supplies a hard-callable class or threshold.
+
+The config-driven batch runner uses `--require-state-manifest`, so every GMT row must have manifest metadata. Use `scripts/split_gmt_by_manifest.py` to create per-tissue/cell-type GMTs from an all-state GMT and the manifest.
+
+## Production Outputs
+
+Use these outputs for downstream portal-scale analysis:
+
+- `cell_state_activity.tsv.gz`: continuous AUCell/UCell scores and non-exclusive activity weights.
+- `cell_state_hard_assignments.tsv.gz`: optional hard calls where a supported threshold exists.
+- `qc_applied_exclusions.tsv.gz`, `qc_direct_metric_flags.tsv.gz`, `qc_signature_review_flags.tsv.gz`: separated QC outputs.
+- `all_gene_state_expression_specificity_cp10k.tsv.gz`: CP10K state expression and screening specificity metrics.
+- `donor_state_weighted_expression_cp10k.tsv.gz`: donor-level state-weighted CP10K summaries for regression.
+- state-derived GMTs under `state_expression_gmts/gmt/`.
+- PIGEAN and donor phenotype regression outputs when requested.
+
+The selected-gene `expression_expected_assignments.tsv.gz`, `expression_hard_assignments.tsv.gz`, `de_expected_assignments.tsv.gz`, and `de_hard_assignments.tsv.gz` files are compatibility outputs. The scoring runner skips them by default; pass `--legacy-selected-gene-summaries write` only for legacy analyses.
 
 ## Selected-Gene Workflow
 
@@ -525,9 +595,26 @@ Outputs:
 - `de_run_summary.json`
 
 The model response is `log1p` donor-level mean CP10K. Numeric phenotypes are
-standardized; categorical phenotypes use the first sorted level as the reference
-group. Output tables include coefficient units and global, trait-level, and
-gene-level FDR columns.
+standardized by default. Categorical phenotype reference groups should be set
+with `--phenotype-config`; if no config is supplied, the script falls back to
+the first sorted level for compatibility. Output tables include coefficient
+units, phenotype reference, and global, trait-level, and gene-level FDR columns.
+
+Example phenotype config:
+
+```yaml
+phenotypes:
+  case_status:
+    type: categorical
+    reference: control
+  hba1c:
+    type: continuous
+    standardize: true
+```
+
+QC signature percentile tails are review diagnostics by default. They become
+hard-exclusion evidence only if `--allow-qc-signature-hard-exclusion`,
+`--exclude-qc-above`, or an explicit workflow rule asks for that behavior.
 
 ## Methods
 

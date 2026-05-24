@@ -23,8 +23,14 @@ def read_table(path: Path) -> pd.DataFrame:
     return pd.read_csv(path, sep="\t", compression="infer", low_memory=False)
 
 
-def write_table(frame: pd.DataFrame, path: Path) -> None:
+def write_table(frame: pd.DataFrame, path: Path, output_format: str = "tsv") -> None:
     frame.to_csv(path, sep="\t", index=False, compression="infer")
+    if output_format in {"parquet", "both"}:
+        parquet_path = path.with_suffix("").with_suffix(".parquet") if path.name.endswith(".tsv.gz") else path.with_suffix(".parquet")
+        try:
+            frame.to_parquet(parquet_path, index=False)
+        except ImportError as exc:
+            raise SystemExit("Parquet output requires pyarrow or fastparquet") from exc
 
 
 def read_one_column(path: Path) -> list[str]:
@@ -145,12 +151,15 @@ def main() -> None:
     ap.add_argument("--metadata", type=Path, required=True)
     ap.add_argument("--cell-state-activity", type=Path, required=True)
     ap.add_argument("--states-gmt", default="")
-    ap.add_argument("--parent-group-cols", default="tissue,cell_type")
+    ap.add_argument("--parent-group-cols", default="map_id,tissue,cell_type")
     ap.add_argument("--donor-col", default="donor_id")
     ap.add_argument("--cell-type-col", default="cell_type")
     ap.add_argument("--pseudocount", type=float, default=0.05)
     ap.add_argument("--min-mean-for-log2fc", type=float, default=0.01)
     ap.add_argument("--query-genes", default="")
+    ap.add_argument("--output-format", choices=["tsv", "parquet", "both"], default="tsv")
+    ap.add_argument("--write-donor-state-expression", action=argparse.BooleanOptionalAction, default=True)
+    ap.add_argument("--donor-expression-genes", choices=["query", "all", "none"], default="all")
     ap.add_argument("--out-dir", type=Path, required=True)
     args = ap.parse_args()
 
@@ -170,8 +179,14 @@ def main() -> None:
     detected = detected.astype(float).tocsr()
 
     metadata = read_table(args.metadata).drop_duplicates("cell_id").set_index("cell_id").reindex(cells)
+    if "map_id" not in metadata.columns:
+        metadata["map_id"] = "all"
     if args.cell_type_col not in metadata.columns and "annotated_cell_type" in metadata.columns:
         args.cell_type_col = "annotated_cell_type"
+    if args.cell_type_col not in metadata.columns:
+        metadata[args.cell_type_col] = "all"
+    if "tissue" not in metadata.columns:
+        metadata["tissue"] = "all"
     if args.donor_col not in metadata.columns:
         metadata[args.donor_col] = metadata.index
     parent_cols = [c.strip() for c in args.parent_group_cols.split(",") if c.strip()]
@@ -183,19 +198,34 @@ def main() -> None:
 
     activity = read_table(args.cell_state_activity)
     activity = activity.loc[activity["state_type"].eq("biological") & activity["cell_id"].isin(cells)].copy()
+    meta_for_activity = metadata[["map_id", "tissue", args.cell_type_col]].rename(columns={args.cell_type_col: "annotated_cell_type"}).reset_index()
+    meta_for_activity = meta_for_activity.rename(columns={"index": "cell_id"})
+    for col in ["map_id", "tissue", "annotated_cell_type"]:
+        if col not in activity.columns:
+            activity[col] = np.nan
+    activity = activity.merge(meta_for_activity, on="cell_id", how="left", suffixes=("", "_metadata"))
+    for col in ["map_id", "tissue", "annotated_cell_type"]:
+        metadata_col = f"{col}_metadata"
+        activity[col] = activity[col].replace("", np.nan).fillna(activity[metadata_col]).fillna("all")
+        activity = activity.drop(columns=[metadata_col])
     cell_pos = pd.Series(np.arange(len(cells)), index=cells)
     markers = read_gmt(Path(args.states_gmt)) if args.states_gmt else {}
     query_genes = set(read_one_column(Path(args.query_genes))) if args.query_genes else set(genes)
+    donor_gene_set = query_genes if args.donor_expression_genes == "query" else (set(genes) if args.donor_expression_genes == "all" else set())
 
     all_parent_rows = []
     for parent in pd.unique(parent_key):
         idx = np.flatnonzero(parent_key.to_numpy() == parent)
+        parent_meta = metadata.iloc[idx][["map_id", "tissue", args.cell_type_col]].astype(str).mode(dropna=False).iloc[0]
         parent_mean = np.asarray(cp10k[idx, :].mean(axis=0)).ravel()
         parent_pct = np.asarray(detected[idx, :].mean(axis=0)).ravel()
         for gene, mean_value, pct_value in zip(genes, parent_mean, parent_pct):
             if gene in query_genes:
                 all_parent_rows.append(
                     {
+                        "map_id": parent_meta["map_id"],
+                        "tissue": parent_meta["tissue"],
+                        "annotated_cell_type": parent_meta[args.cell_type_col],
                         "expression_result_scope": parent,
                         "gene": gene,
                         "mean_cp10k_all_parent": float(mean_value),
@@ -213,21 +243,33 @@ def main() -> None:
         ("gradient_percentile_squared", "state_activity_weight_gradient"),
         ("high_tail_percentile_90_100", "state_activity_weight_hightail"),
     ]
-    state_groups: dict[str, pd.DataFrame] = {}
-    state_meta: dict[str, pd.Series] = {}
-    state_parent: dict[str, str] = {}
-    for state, group in activity.groupby("state_name", sort=False):
+    state_groups: dict[tuple[str, str, str, str], pd.DataFrame] = {}
+    state_meta: dict[tuple[str, str, str, str], pd.Series] = {}
+    state_parent: dict[tuple[str, str, str, str], str] = {}
+    group_cols = ["map_id", "tissue", "annotated_cell_type", "state_name"]
+    for state_key, group in activity.groupby(group_cols, sort=False):
+        map_id, tissue, annotated_cell_type, state = state_key
         positions = cell_pos.reindex(group["cell_id"]).dropna().astype(int).to_numpy()
-        parent = parent_key.iloc[positions].mode().iloc[0] if len(positions) else "all"
-        state_groups[state] = group
-        state_meta[state] = group.iloc[0]
-        state_parent[state] = parent
+        if len(positions):
+            candidate_parents = pd.unique(parent_key.iloc[positions])
+            if len(candidate_parents) != 1:
+                raise SystemExit(
+                    "State activity group spans multiple parent groups; rerun with parent-key columns "
+                    f"or split input. Offending key: {state_key}"
+                )
+            parent = candidate_parents[0]
+        else:
+            parent = "|".join([str(tissue), str(annotated_cell_type)])
+        state_groups[state_key] = group
+        state_meta[state_key] = group.iloc[0]
+        state_parent[state_key] = parent
 
     for parent in pd.unique(list(state_parent.values())):
-        states_for_parent = [state for state, value in state_parent.items() if value == parent]
+        states_for_parent = [state_key for state_key, value in state_parent.items() if value == parent]
         parent_idx = np.flatnonzero(parent_key.to_numpy() == parent)
         if len(parent_idx) == 0:
             continue
+        parent_meta = metadata.iloc[parent_idx][["map_id", "tissue", args.cell_type_col]].astype(str).mode(dropna=False).iloc[0]
         parent_mean = np.asarray(cp10k[parent_idx, :].mean(axis=0)).ravel()
         parent_second = np.asarray(cp10k_sq[parent_idx, :].mean(axis=0)).ravel()
         parent_pct = np.asarray(detected[parent_idx, :].mean(axis=0)).ravel()
@@ -235,8 +277,9 @@ def main() -> None:
         donor_levels = pd.Index(pd.unique(donor_ids))
         columns = []
         col_meta = []
-        for state in states_for_parent:
-            group = state_groups[state]
+        for state_key in states_for_parent:
+            group = state_groups[state_key]
+            state = state_key[3]
             positions = cell_pos.reindex(group["cell_id"]).dropna().astype(int).to_numpy()
             for weight_type, weight_col in weight_specs:
                 weights = pd.to_numeric(group[weight_col], errors="coerce").fillna(0.0).to_numpy(float)
@@ -245,7 +288,7 @@ def main() -> None:
                     columns.append(sparse.csr_matrix((weights[keep], (positions[keep], np.zeros(int(keep.sum())))), shape=(len(cells), 1)))
                 else:
                     columns.append(sparse.csr_matrix((len(cells), 1), dtype=float))
-                col_meta.append((state, weight_type))
+                col_meta.append((state_key, state, weight_type))
         if not columns:
             continue
         weight_matrix = sparse.hstack(columns, format="csr")
@@ -286,14 +329,17 @@ def main() -> None:
             donor_balanced_mean_sum += donor_mean_filled
             donor_balanced_pct_sum += donor_pct_filled
             donor_balanced_count += donor_valid.astype(float)[:, None]
-            for col_idx, (state, weight_type) in enumerate(col_meta):
+            for col_idx, (state_key, state, weight_type) in enumerate(col_meta):
                 if not donor_valid[col_idx]:
                     continue
                 for gidx, gene in enumerate(genes):
-                    if gene in query_genes:
+                    if gene in donor_gene_set:
                         donor_level_rows.append(
                             {
                                 "donor_id": donor,
+                                "map_id": state_key[0],
+                                "tissue": state_key[1],
+                                "annotated_cell_type": state_key[2],
                                 "expression_result_scope": parent,
                                 "state_name": state,
                                 "state_weight_type": weight_type,
@@ -305,8 +351,8 @@ def main() -> None:
                             }
                         )
 
-        for col_idx, (state, weight_type) in enumerate(col_meta):
-            meta = state_meta[state]
+        for col_idx, (state_key, state, weight_type) in enumerate(col_meta):
+            meta = state_meta[state_key]
             state_mean = state_means[col_idx, :]
             state_second = state_seconds[col_idx, :]
             state_pct = state_pcts[col_idx, :]
@@ -331,6 +377,9 @@ def main() -> None:
                 is_marker = gene in marker_set
                 loo_reason = "all_gene_mode_not_recomputed" if is_marker else "not_marker"
                 row = {
+                    "map_id": state_key[0],
+                    "tissue": state_key[1],
+                    "annotated_cell_type": state_key[2],
                     "gene": gene,
                     "state_name": state,
                     "state_weight_type": weight_type,
@@ -356,6 +405,7 @@ def main() -> None:
                     "state_class": meta.get("state_class", "unknown"),
                     "threshold_status": meta.get("threshold_status", "unknown"),
                     "expression_result_scope": expression_scope(meta),
+                    "parent_group_key": parent,
                     "leave_one_gene_out_used": False,
                     "leave_one_gene_out_reason": loo_reason,
                     "n_markers_after_leave_one_out": max(len(marker_set) - 1, 0) if is_marker else len(marker_set),
@@ -367,19 +417,20 @@ def main() -> None:
     specificity = pd.DataFrame(spec_rows)
     if not specificity.empty:
         specificity["q_value"] = bh_fdr(specificity["p_value"])
-        specificity["q_by_state"] = specificity.groupby("state_name", group_keys=False)["p_value"].apply(bh_fdr)
+        specificity["q_by_state"] = specificity.groupby(["map_id", "tissue", "annotated_cell_type", "state_name"], group_keys=False)["p_value"].apply(bh_fdr)
         specificity["q_by_gene"] = specificity.groupby("gene", group_keys=False)["p_value"].apply(bh_fdr)
         expression = expression.merge(
-            specificity[["gene", "state_name", "state_weight_type", "q_value", "q_by_state", "q_by_gene"]],
-            on=["gene", "state_name", "state_weight_type"],
+            specificity[["map_id", "tissue", "annotated_cell_type", "gene", "state_name", "state_weight_type", "q_value", "q_by_state", "q_by_gene"]],
+            on=["map_id", "tissue", "annotated_cell_type", "gene", "state_name", "state_weight_type"],
             how="left",
         )
 
-    write_table(all_parent, args.out_dir / "all_gene_all_parent_cp10k.tsv.gz")
-    write_table(expression, args.out_dir / "all_gene_state_expression_cp10k.tsv.gz")
-    write_table(specificity, args.out_dir / "all_gene_state_specificity_cp10k.tsv.gz")
-    write_table(expression, args.out_dir / "all_gene_state_expression_specificity_cp10k.tsv.gz")
-    write_table(pd.DataFrame(donor_level_rows), args.out_dir / "donor_state_weighted_expression_cp10k.tsv.gz")
+    write_table(all_parent, args.out_dir / "all_gene_all_parent_cp10k.tsv.gz", args.output_format)
+    write_table(expression, args.out_dir / "all_gene_state_expression_cp10k.tsv.gz", args.output_format)
+    write_table(specificity, args.out_dir / "all_gene_state_specificity_cp10k.tsv.gz", args.output_format)
+    write_table(expression, args.out_dir / "all_gene_state_expression_specificity_cp10k.tsv.gz", args.output_format)
+    if args.write_donor_state_expression:
+        write_table(pd.DataFrame(donor_level_rows), args.out_dir / "donor_state_weighted_expression_cp10k.tsv.gz", args.output_format)
     summary = {
         "raw_10x_dir": str(args.raw_10x_dir),
         "cell_state_activity": str(args.cell_state_activity),
@@ -389,7 +440,9 @@ def main() -> None:
         "weight_types": [x[0] for x in weight_specs],
         "expression_unit": "CP10K",
         "specificity_test": "weighted_vs_parent_mean_cp10k_normal_approximation_screening",
-        "donor_state_weighted_expression": str(args.out_dir / "donor_state_weighted_expression_cp10k.tsv.gz"),
+        "donor_state_weighted_expression": str(args.out_dir / "donor_state_weighted_expression_cp10k.tsv.gz") if args.write_donor_state_expression else None,
+        "donor_expression_genes": args.donor_expression_genes,
+        "output_format": args.output_format,
         "timestamp": datetime.now().isoformat(timespec="seconds"),
     }
     (args.out_dir / "state_expression_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
