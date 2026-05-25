@@ -847,6 +847,137 @@ def test_manifest_splitter_and_batch_dry_run(tmpdir: Path) -> None:
     assert pd.read_csv(out_workflow / "group_manifest.tsv", sep="\t").shape[0] == 2
 
 
+def write_tiny_10x(directory: Path, genes: list[str], cells: list[str], values: list[list[float]]) -> None:
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    mmwrite(directory / "matrix.mtx", sparse.csr_matrix(values).T)
+    (directory / "features.tsv").write_text("\n".join(f"{g}\t{g}" for g in genes) + "\n", encoding="utf-8")
+    (directory / "barcodes.tsv").write_text("\n".join(cells) + "\n", encoding="utf-8")
+
+
+def test_batch_runner_real_small_with_missing_gmt(tmpdir: Path) -> None:
+    cells = [f"c{i}" for i in range(1, 9)]
+    genes = ["G1", "G2", "G3", "G4", "G5", "G6", "MT-CO1"]
+    metadata = pd.DataFrame(
+        {
+            "cell_id": cells,
+            "map_id": ["map1"] * 8,
+            "tissue": ["tissue_a", "tissue_a", "tissue_a", "tissue_a", "tissue_b", "tissue_b", "tissue_b", "tissue_b"],
+            "cell_type": ["cell_type_a", "cell_type_a", "cell_type_b", "cell_type_b", "cell_type_a", "cell_type_a", "cell_type_b", "cell_type_b"],
+            "donor_id": ["d1", "d2", "d1", "d2", "d3", "d4", "d3", "d4"],
+            "sample_id": ["s1", "s2", "s1", "s2", "s3", "s4", "s3", "s4"],
+        }
+    )
+    values = [
+        [10, 8, 1, 1, 0, 0, 0],
+        [9, 7, 1, 1, 0, 0, 0],
+        [1, 1, 10, 8, 0, 0, 0],
+        [1, 1, 9, 7, 0, 0, 0],
+        [0, 0, 1, 1, 10, 8, 0],
+        [0, 0, 1, 1, 9, 7, 0],
+        [0, 0, 2, 2, 2, 2, 5],
+        [0, 0, 2, 2, 2, 2, 5],
+    ]
+    metadata_path = tmpdir / "batch_metadata.tsv"
+    expression_path = tmpdir / "batch_expression.tsv"
+    rank_dir = tmpdir / "batch_rank_10x"
+    states_path = tmpdir / "batch_states.gmt"
+    qc_path = tmpdir / "batch_qc.gmt"
+    manifest_path = tmpdir / "batch_state_manifest.tsv"
+    phenotypes_path = tmpdir / "batch_phenotypes.tsv"
+    phenotype_config_path = tmpdir / "batch_phenotype_config.yaml"
+    multi_y_path = tmpdir / "multi_y.tsv.gz"
+    config_path = tmpdir / "batch_workflow.yaml"
+    out_dir = tmpdir / "batch_out"
+    metadata.to_csv(metadata_path, sep="\t", index=False)
+    write_tiny_10x(rank_dir, genes, cells, values)
+    expression_rows = []
+    for cell, row in zip(cells, values):
+        for gene, value in zip(genes, row):
+            if value:
+                expression_rows.append({"cell_id": cell, "gene": gene, "expression": value})
+    pd.DataFrame(expression_rows).to_csv(expression_path, sep="\t", index=False)
+    states_path.write_text(
+        "\n".join(
+            [
+                "state_tissue_a_a\ttoy\tG1\tG2\tG3",
+                "state_tissue_a_b\ttoy\tG3\tG4\tG1",
+                "state_tissue_b_a\ttoy\tG5\tG6\tG3",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    pd.DataFrame(
+        {
+            "state_name": ["state_tissue_a_a", "state_tissue_a_b", "state_tissue_b_a"],
+            "tissue": ["tissue_a", "tissue_a", "tissue_b"],
+            "cell_type": ["cell_type_a", "cell_type_b", "cell_type_a"],
+            "state_class": ["process_gradient", "rare_process", "broad_function_gradient"],
+            "is_composite_required": [False, False, False],
+        }
+    ).to_csv(manifest_path, sep="\t", index=False)
+    qc_path.write_text("qc_mito\tcategory=technical;tier=hard_exclude_if_extreme\tMT-CO1\tG1\tG2\n", encoding="utf-8")
+    pd.DataFrame({"donor_id": ["d1", "d2", "d3", "d4"], "case_status": ["case", "control", "case", "control"]}).to_csv(phenotypes_path, sep="\t", index=False)
+    phenotype_config_path.write_text("phenotypes:\n  case_status:\n    type: categorical\n    reference: control\n", encoding="utf-8")
+    pd.DataFrame({"gene": ["G1"], "trait": ["trait_a"], "z": [1.0]}).to_csv(multi_y_path, sep="\t", index=False, compression="gzip")
+    config_path.write_text(
+        "\n".join(
+            [
+                f"metadata: {metadata_path}",
+                f"rank_10x_dir: {rank_dir}",
+                f"raw_10x_dir: {rank_dir}",
+                f"expression_matrix: {expression_path}",
+                f"states_gmt: {states_path}",
+                f"state_manifest: {manifest_path}",
+                f"qc_gmt: {qc_path}",
+                f"phenotypes: {phenotypes_path}",
+                f"phenotype_config: {phenotype_config_path}",
+                f"out_dir: {out_dir}",
+                "split_by: [tissue, cell_type]",
+                "skip_groups_without_gmt: true",
+                "allow_small_rank_universe: true",
+                "donor_expression_genes: query",
+                "write_donor_state_expression: true",
+                "scoring_extra_args:",
+                "  min_calibration_cells: 1",
+                "  min_markers_present: 1",
+                "  min_marker_coverage: 0.2",
+                "  min_score_iqr: 0",
+                "  allow_acceptance_failures: true",
+                "expression_extra_args:",
+                "  query_genes: " + str(tmpdir / "query_genes.txt"),
+                "pigean:",
+                "  pigean_command: definitely_missing_pigean",
+                f"  multi_y_input: {multi_y_path}",
+                "  methods: [original_markers, top_absolute_expression]",
+                "  dry_run: true",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (tmpdir / "query_genes.txt").write_text("G1\nG3\nG5\n", encoding="utf-8")
+
+    run_cmd([sys.executable, str(ROOT / "scripts" / "run_all_cell_state_workflow.py"), "--config", str(config_path), "--dry-run", "--jobs", "2", "--skip-groups-without-gmt"])
+    dry_commands = pd.read_csv(out_dir / "command_manifest.tsv", sep="\t")
+    assert dry_commands["command"].str.contains("run_pigean_multi_y_for_state_gmts.py").any()
+
+    real_out = tmpdir / "batch_real_out"
+    config_path.write_text(config_path.read_text(encoding="utf-8").replace(str(out_dir), str(real_out)), encoding="utf-8")
+    run_cmd([sys.executable, str(ROOT / "scripts" / "run_all_cell_state_workflow.py"), "--config", str(config_path), "--jobs", "2", "--skip-groups-without-gmt"])
+    skipped = pd.read_csv(real_out / "skipped_groups.tsv", sep="\t")
+    assert skipped["reason"].tolist() == ["missing_group_gmt"]
+    commands = pd.read_csv(real_out / "command_manifest.tsv", sep="\t")
+    assert commands["command"].str.contains("--donor-expression-genes query").any()
+    assert commands["command"].str.contains("run_pigean_multi_y_for_state_gmts.py").any()
+    run_summary = json.loads((real_out / "run_summary.json").read_text(encoding="utf-8"))
+    assert run_summary["pigean_scope"] == "per_group_per_signature_method"
+    assert run_summary["n_skipped_groups"] == 1
+    group_dirs = list((Path(real_out) / "groups").glob("*"))
+    assert any((path / "pigean" / "original_markers" / "run_pigean.sh").exists() for path in group_dirs)
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         tmpdir = Path(tmp)
@@ -857,6 +988,7 @@ def main() -> None:
         test_cmdkp_general_runner(tmpdir)
         test_assign_genes_to_states(tmpdir)
         test_manifest_splitter_and_batch_dry_run(tmpdir)
+        test_batch_runner_real_small_with_missing_gmt(tmpdir)
     print("smoke tests OK")
 
 

@@ -57,14 +57,30 @@ phenotype_config: results/cell_state_de/phenotype_config.yaml
 split_by: [tissue, cell_type]
 out_dir: results/cell_state_de/production_run
 output_format: tsv
+jobs: 4
+resume: true
+skip_groups_without_gmt: true
+donor_expression_genes: query
+write_donor_state_expression: true
+pigean:
+  pigean_command: pigean
+  multi_y_input: results/cell_state_de/all.gene_stats.large.gt1.out.gz
+  methods: [original_markers, top_absolute_expression, top_specific_fc, top_specific_logp]
+  dry_run: false
 ```
 
 ```bash
 ../.venv/bin/python cell_state_de/scripts/run_all_cell_state_workflow.py \
-  --config results/cell_state_de/workflow.yaml
+  --config results/cell_state_de/workflow.yaml \
+  --jobs 4 \
+  --resume \
+  --skip-groups-without-gmt
 ```
 
 Use `--dry-run` first to write the planned commands, group manifest, and timing scaffold without executing the workflow.
+When PIGEAN is configured, the batch runner runs PIGEAN once per signature
+method within each group/cell type across that group's states. It does not
+concatenate GMTs across cell types before running PIGEAN.
 
 ## State Manifest
 
@@ -99,46 +115,10 @@ Use these outputs for downstream portal-scale analysis:
 
 The selected-gene `expression_expected_assignments.tsv.gz`, `expression_hard_assignments.tsv.gz`, `de_expected_assignments.tsv.gz`, and `de_hard_assignments.tsv.gz` files are compatibility outputs. The scoring runner skips them by default; pass `--legacy-selected-gene-summaries write` only for legacy analyses.
 
-## Selected-Gene Workflow
+## Legacy Workflows
 
-Run these commands from the analysis project root, not from inside this directory.
-
-1. Export selected genes and metadata from a single-cell object.
-
-```bash
-R_LIBS_USER=../.Rlib /opt/homebrew/bin/Rscript --vanilla cell_state_de/scripts/extract_selected_expression_from_seurat.R \
-  --rds data/external/example_map/example.rds \
-  --genes cell_state_de/configs/examples/example_genes.txt \
-  --metadata-out cell_state_de/results/metadata.tsv.gz \
-  --expression-out cell_state_de/results/expression_long.tsv.gz \
-  --layer data
-```
-
-2. Assign marker-defined states.
-
-```bash
-../.venv/bin/python cell_state_de/scripts/assign_cell_states.py \
-  --metadata cell_state_de/results/metadata.tsv.gz \
-  --expression cell_state_de/results/expression_long.tsv.gz \
-  --state-spec cell_state_de/configs/examples/example_state_spec.json \
-  --out cell_state_de/results/cell_state_membership.tsv.gz
-```
-
-3. Run donor-aware differential expression.
-
-```bash
-../.venv/bin/python cell_state_de/scripts/donor_pseudobulk_de.py \
-  --metadata cell_state_de/results/metadata.tsv.gz \
-  --expression cell_state_de/results/expression_long.tsv.gz \
-  --states cell_state_de/results/cell_state_membership.tsv.gz \
-  --genes cell_state_de/configs/examples/example_genes.txt \
-  --state example_marker_high \
-  --donor-col donor_id \
-  --group-col disease_group \
-  --case case \
-  --control control \
-  --out cell_state_de/results/example_marker_high_case_vs_control.tsv
-```
+Selected-gene, older Seurat GMT scoring, quantile assignment, and legacy
+pseudobulk workflows have moved to [docs/legacy_workflows.md](docs/legacy_workflows.md).
 
 ## Interfaces
 
@@ -150,91 +130,10 @@ R_LIBS_USER=../.Rlib /opt/homebrew/bin/Rscript --vanilla cell_state_de/scripts/e
 
 See [docs/interfaces.md](docs/interfaces.md) for the exact schema.
 
-## GMT State Workflow
-
-Use this workflow when state definitions come from a GMT marker file.
-
-1. Score cells for marker-defined states. The production default is local UCell-style
-   rank scoring. The script can also write calibrated matched-random null
-   thresholds for state calling.
-
-```bash
-R_LIBS_USER=../.Rlib /opt/homebrew/bin/Rscript --vanilla cell_state_de/scripts/score_gmt_states_from_seurat.R \
-  --rds data/external/example_map/example.rds \
-  --gmt results/cell_state_de/example_cell_state_markers.gmt \
-  --state-regex '^tissue_a_cell_type_a_' \
-  --cell-filter-col cell_type \
-  --cell-filter-values 'Type A' \
-  --metadata-cols 'cell_type,donor_id,condition,treatment' \
-  --score-method ucell \
-  --thresholds-out results/cell_state_de/example_state_thresholds.tsv.gz \
-  --null-n 500 \
-  --null-percentile 0.99 \
-  --null-max-cells 20000 \
-  --scores-out results/cell_state_de/example_state_scores.tsv.gz \
-  --wide-out results/cell_state_de/example_state_scores_wide.tsv.gz \
-  --metadata-out results/cell_state_de/example_state_metadata.tsv.gz
-```
-
-2. Call multi-label states from scores and calibrated thresholds.
-
-```bash
-../.venv/bin/python cell_state_de/scripts/call_states_from_scores.py \
-  --scores results/cell_state_de/example_state_scores.tsv.gz \
-  --thresholds results/cell_state_de/example_state_thresholds.tsv.gz \
-  --metadata results/cell_state_de/example_state_metadata.tsv.gz \
-  --parent-cell-type-col cell_type \
-  --rules cell_state_de/configs/examples/example_state_call_rules.json \
-  --out results/cell_state_de/example_state_calls.tsv.gz \
-  --annotation-out results/cell_state_de/example_cell_annotations.tsv.gz
-```
-
-Legacy exploratory quantile assignment remains available, but should not be used
-as the production state-active definition because it forces the same approximate
-fraction of cells into every state.
-
-```bash
-../.venv/bin/python cell_state_de/scripts/assign_states_from_scores.py \
-  --scores results/cell_state_de/example_state_scores.tsv.gz \
-  --metadata results/cell_state_de/example_state_metadata.tsv.gz \
-  --cell-type-col cell_type \
-  --state-cell-type-map results/cell_state_de/example_state_cell_type_map.tsv \
-  --method quantile \
-  --within cell_type \
-  --quantile 0.75 \
-  --out results/cell_state_de/example_state_membership.tsv.gz
-```
-
-3. Run donor-pseudobulk differential expression from Seurat counts.
-
-```bash
-R_LIBS_USER=../.Rlib /opt/homebrew/bin/Rscript --vanilla cell_state_de/scripts/pseudobulk_de_from_seurat.R \
-  --rds data/external/example_map/example.rds \
-  --membership results/cell_state_de/example_state_calls.tsv.gz \
-  --analysis-types cell_type,state,state_association \
-  --donor-col donor_id \
-  --group-col condition \
-  --cell-type-col cell_type \
-  --cell-filter-col cell_type \
-  --cell-filter-values 'Type A' \
-  --case-values case \
-  --control-values control \
-  --out results/cell_state_de/example_state_de.tsv.gz
-```
-
-4. Assign genes to states from curated markers plus state association DE.
-
-```bash
-../.venv/bin/python cell_state_de/scripts/assign_genes_to_states.py \
-  --gmt results/cell_state_de/example_cell_state_markers.gmt \
-  --state-regex '^tissue_a_cell_type_a_' \
-  --state-association-de results/cell_state_de/example_state_de.tsv.gz \
-  --out results/cell_state_de/example_gene_state_assignments.tsv.gz
-```
-
 ## Dependencies
 
-Python scripts use `pandas`, `numpy`, and `scipy`. The R exporter requires `Seurat`.
+Python scripts use `pandas`, `numpy`, `scipy`, and `PyYAML`. Parquet output
+requires `pyarrow`, which is included in `requirements.txt`. The R exporter requires `Seurat`.
 GMT scoring requires `Seurat` and `Matrix`; pseudobulk DE requires `Seurat`, `Matrix`, and `edgeR`.
 UCell-style scoring is implemented locally and does not require the R `UCell` package.
 
@@ -427,6 +326,12 @@ threshold is accepted only when a minimum-density valley between lower- and
 higher-AUCell regions supports a state-active population, or when an explicit
 YAML threshold is supplied. Otherwise the state is marked `continuous_only` and
 no hard-positive cells are forced.
+
+Default hard-call active-fraction bounds are state-class specific:
+
+- `process_gradient`: at most 30% active.
+- `rare_process`: at most 10% active.
+- `broad_identity_gradient`, `broad_function_gradient`, and `composite_required`: no automatic hard call.
 
 Soft weights are threshold-centered when a hard threshold exists:
 

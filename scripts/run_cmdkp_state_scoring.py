@@ -917,7 +917,7 @@ def qc_metrics(matrix: pd.DataFrame, metadata: pd.DataFrame, qc_scores: pd.DataF
     )
 
 
-def explore_aucell_threshold(scores: pd.Series, args: argparse.Namespace) -> tuple[float, str, str, float]:
+def explore_aucell_threshold(scores: pd.Series, args: argparse.Namespace, max_active_fraction: float) -> tuple[float, str, str, float]:
     values = pd.to_numeric(scores, errors="coerce").dropna().clip(0, 1)
     if len(values) < args.min_calibration_cells:
         return np.nan, "insufficient_cells", "calibration_group_below_min_cells", np.nan
@@ -942,7 +942,7 @@ def explore_aucell_threshold(scores: pd.Series, args: argparse.Namespace) -> tup
     valley = valley_region[np.argmin(smooth[valley_region])]
     threshold = float(centers[valley])
     active_fraction = float((values >= threshold).mean())
-    if active_fraction < args.aucell_min_active_fraction or active_fraction > args.aucell_max_active_fraction:
+    if active_fraction < args.aucell_min_active_fraction or active_fraction > max_active_fraction:
         return np.nan, "continuous_only", "active_fraction_outside_bounds", active_fraction
     if values.quantile(0.99) <= threshold:
         return np.nan, "continuous_only", "q99_not_above_threshold", active_fraction
@@ -951,6 +951,14 @@ def explore_aucell_threshold(scores: pd.Series, args: argparse.Namespace) -> tup
 
 def class_allows_hard_call(state_class: str) -> bool:
     return state_class in {"process_gradient", "rare_process"}
+
+
+def class_max_active_fraction(state_class: str, args: argparse.Namespace) -> float:
+    if state_class == "process_gradient":
+        return args.aucell_process_gradient_max_active_fraction
+    if state_class == "rare_process":
+        return args.aucell_rare_process_max_active_fraction
+    return 0.0
 
 
 def class_continuous_status(state_class: str) -> tuple[str, str]:
@@ -1021,7 +1029,7 @@ def calibrate_thresholds(
                 }
             )
             continue
-        threshold, status, reason, active_fraction = explore_aucell_threshold(aucell, args)
+        threshold, status, reason, active_fraction = explore_aucell_threshold(aucell, args, class_max_active_fraction(base["state_class"], args))
         rows.append(
             {
                 **base,
@@ -1838,7 +1846,9 @@ def main() -> None:
     parser.add_argument("--aucell-threshold-bins", type=int, default=64)
     parser.add_argument("--aucell-threshold-smoothing", type=float, default=1.0)
     parser.add_argument("--aucell-min-active-fraction", type=float, default=0.01)
-    parser.add_argument("--aucell-max-active-fraction", type=float, default=0.80)
+    parser.add_argument("--aucell-max-active-fraction", type=float, default=0.30, help="Compatibility alias for process-gradient max active fraction")
+    parser.add_argument("--aucell-process-gradient-max-active-fraction", type=float, default=0.30)
+    parser.add_argument("--aucell-rare-process-max-active-fraction", type=float, default=0.10)
     parser.add_argument("--min-markers-present", type=int, default=5)
     parser.add_argument("--min-marker-coverage", type=float, default=0.5)
     parser.add_argument("--default-qc-threshold", type=float, default=0.95)
@@ -1911,6 +1921,8 @@ def main() -> None:
     metadata = metadata.drop_duplicates("cell_id").copy()
     metadata = apply_metadata_filter(metadata, args.parent_cell_filter)
     args.state_class_overrides = load_state_class_config(args.state_class_config)
+    if args.aucell_max_active_fraction != 0.30:
+        args.aucell_process_gradient_max_active_fraction = args.aucell_max_active_fraction
     state_manifest = load_state_manifest(args.state_manifest)
     expression, mapping_info = harmonize_expression(read_expression_input(args.expression), args.expression_kind, args.gene_map, args.duplicate_collapse)
     matrix = expression_matrix(expression, metadata["cell_id"])
