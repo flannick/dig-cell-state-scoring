@@ -1884,7 +1884,7 @@ def main() -> None:
     args.metadata = args.metadata or args.cell_metadata
     args.biological_gmt = args.biological_gmt or args.states_gmt
     args.state_thresholds_yaml = args.state_thresholds_yaml or args.state_threshold_config
-    args.qc_gmt = args.qc_gmt or args.qc_states_gmt or "out/qc/cmdkp_all_tissues_minimal_bad_cell_qc_signatures.gmt"
+    args.qc_gmt = args.qc_gmt or args.qc_states_gmt or str(Path(__file__).resolve().parents[1] / "dat" / "qc" / "cmdkp_all_tissues_minimal_bad_cell_qc_signatures.gmt")
     if not args.expression or not args.metadata or not args.biological_gmt:
         raise SystemExit("--expression-matrix, --cell-metadata, and --states-gmt are required")
     if not args.out_dir:

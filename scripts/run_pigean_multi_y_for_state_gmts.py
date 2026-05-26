@@ -35,7 +35,7 @@ def main() -> None:
     ap.add_argument(
         "--pigean-command-template",
         default="",
-        help="Optional template using {pigean}, {gmt}, {multi_y}, {out}, {method}, and {extra_args}",
+        help="Optional template using {pigean}, {gmt}, {multi_y}, {out_dir}, {out}, {method}, and {extra_args}",
     )
     ap.add_argument("--multi-y-input", default="")
     ap.add_argument("--traits", default="", help="Alias for --multi-y-input when the local PIGEAN command expects trait input")
@@ -76,6 +76,7 @@ def main() -> None:
                 pigean=command,
                 gmt=str(gmt_by_method[method]),
                 multi_y=multi_y,
+                out_dir=str(method_dir),
                 out=str(out_prefix),
                 method=method,
                 extra_args=args.extra_args,

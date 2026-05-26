@@ -24,7 +24,7 @@ For one tissue/cell-type group, run the individual scripts with a full sparse ra
   --expression-matrix results/cell_state_de/query_gene_expression_long.tsv.gz \
   --cell-metadata results/cell_state_de/metadata.tsv.gz \
   --states-gmt results/cell_state_de/state_gmts/tissue_a/cell_type_a.gmt \
-  --qc-states-gmt results/cell_state_de/qc_signatures.gmt \
+  --qc-states-gmt cell_state_de/dat/qc/cmdkp_all_tissues_minimal_bad_cell_qc_signatures.gmt \
   --state-manifest results/cell_state_de/state_manifest.tsv \
   --require-state-manifest \
   --parent-cell-filter 'tissue=tissue_a;cell_type=cell_type_a' \
@@ -49,9 +49,9 @@ metadata: results/cell_state_de/metadata.tsv.gz
 rank_10x_dir: results/cell_state_de/full_rank_10x
 raw_10x_dir: results/cell_state_de/full_raw_10x
 expression_matrix: results/cell_state_de/query_gene_expression_long.tsv.gz
-states_gmt: results/cell_state_de/all_states.gmt
+states_gmt: cell_state_de/dat/pancreas/pancreas_cell_state_markers.gmt
 state_manifest: results/cell_state_de/state_manifest.tsv
-qc_gmt: results/cell_state_de/qc_signatures.gmt
+qc_gmt: cell_state_de/dat/qc/cmdkp_all_tissues_minimal_bad_cell_qc_signatures.gmt
 phenotypes: results/cell_state_de/donor_phenotypes.tsv
 phenotype_config: results/cell_state_de/phenotype_config.yaml
 split_by: [tissue, cell_type]
@@ -63,8 +63,9 @@ skip_groups_without_gmt: true
 donor_expression_genes: query
 write_donor_state_expression: true
 pigean:
-  pigean_command: pigean
-  multi_y_input: results/cell_state_de/all.gene_stats.large.gt1.out.gz
+  pigean_command: ../.venv/bin/python
+  pigean_command_template: "env PYTHONPATH=/Users/flannick/codex-workspace/analysis/pigean_optimize/pigean/src {pigean} -m pigean betas --X-in {gmt} --multi-y-in {multi_y} --multi-y-id-col Gene --multi-y-pheno-col Trait_Internal --multi-y-log-bf-col Direct --multi-y-combined-col Combined --multi-y-prior-col Indirect --multi-y-trait-blacklist-in results/pigean_all_cell_states_full_universe_default_no_hpo_exomes/trait_blacklist_exomes_hp.txt --gene-universe-in ../resources/pigean/data/reference/NCBI37.3.plink.gene.loc --gene-universe-id-col 6 --gene-universe-no-header --gene-set-stats-out {out} --params-out {out_dir}/params.out.gz --log-file {out_dir}/run.log --warnings-file {out_dir}/warnings.log --output-detail debug --deterministic --hide-progress --min-gene-set-size 1 --filter-gene-set-p 1 --max-gene-set-read-p 1 --no-filter-negative --prune-gene-sets 1.1 --weighted-prune-gene-sets 1.1 {extra_args}"
+  multi_y_input: ../resources/pigean/data/large/all.gene_stats.large.gt1.out.gz
   methods: [original_markers, top_absolute_expression, top_specific_fc, top_specific_logp]
   dry_run: false
 ```
@@ -81,6 +82,8 @@ Use `--dry-run` first to write the planned commands, group manifest, and timing 
 When PIGEAN is configured, the batch runner runs PIGEAN once per signature
 method within each group/cell type across that group's states. It does not
 concatenate GMTs across cell types before running PIGEAN.
+See [docs/pigean_full_universe_default_no_hpo_exomes.md](docs/pigean_full_universe_default_no_hpo_exomes.md)
+for the full validated PIGEAN command and template.
 
 ## State Manifest
 
@@ -152,7 +155,7 @@ integrated embeddings, PCA coordinates, or other latent spaces as scoring input.
   --expression-matrix results/cell_state_de/query_gene_expression_long.tsv.gz \
   --cell-metadata results/cell_state_de/example_metadata.tsv.gz \
   --states-gmt results/cell_state_de/example_cell_state_markers.gmt \
-  --qc-states-gmt out/qc/cmdkp_all_tissues_minimal_bad_cell_qc_signatures.gmt \
+  --qc-states-gmt cell_state_de/dat/qc/cmdkp_all_tissues_minimal_bad_cell_qc_signatures.gmt \
   --out-dir results/cell_state_de/cmdkp_state_scoring \
   --expression-kind log1p_normalized \
   --map-id-col map_id \
@@ -470,11 +473,13 @@ For each method, the wrapper writes `run_command.txt`, `run_summary.json`, and
 either PIGEAN outputs or a runnable `run_pigean.sh` if PIGEAN is unavailable or
 `--dry-run` is used.
 
+For the full-universe default run excluding HPO/exome traits, use the template
+in [docs/pigean_full_universe_default_no_hpo_exomes.md](docs/pigean_full_universe_default_no_hpo_exomes.md).
 If a local PIGEAN installation uses different option names, use
 `--pigean-command-template`, for example:
 
 ```bash
---pigean-command-template "{pigean} betas --gmt-in {gmt} --multi-y-in {multi_y} --out {out} {extra_args}"
+--pigean-command-template "{pigean} betas --X-in {gmt} --multi-y-in {multi_y} --gene-set-stats-out {out} {extra_args}"
 ```
 
 ## Donor Phenotype Regression
