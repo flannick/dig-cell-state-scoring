@@ -17,6 +17,10 @@ The packaged curated marker workbooks and GMT files can also be converted into
 API-ready JSON with `scripts/build_curated_cell_state_api_json.py`; see
 [docs/cell_state_api_json.md](docs/cell_state_api_json.md).
 
+Data-driven programs can be matched back to curated states and QC signatures
+with `scripts/match_programs_to_cell_states.py`; see
+[docs/program_state_matching.md](docs/program_state_matching.md).
+
 ## Production Quick Start
 
 For one tissue/cell-type group, run the individual scripts with a full sparse rank universe and a group-specific GMT:

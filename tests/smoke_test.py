@@ -64,6 +64,162 @@ def test_curated_cell_state_api_json_build(tmpdir: Path) -> None:
         assert len(markers) >= 5 or low_coverage
 
 
+def test_match_programs_to_cell_states(tmpdir: Path) -> None:
+    program_loadings = pd.DataFrame(
+        {
+            "program_id": ["p_state"] * 15 + ["p_random"] * 15 + ["p_ribo"] * 15,
+            "gene": (["G1", "G2", "G3", "G4", "G5", "R1", "R2", "R3", "R4", "R5", "RPL1", "RPL2", "RPL3", "RPL4", "RPL5"] * 3),
+            "loading": (
+                [10, 9, 8, 7, 6, 1, 1, 1, 1, 1, 0.5, 0.5, 0.5, 0.5, 0.5]
+                + [1, 2, 1, 2, 1, 8, 7, 6, 5, 4, 1, 1, 1, 1, 1]
+                + [0.5, 0.5, 0.5, 0.5, 0.5, 1, 1, 1, 1, 1, 10, 9, 8, 7, 6]
+            ),
+        }
+    )
+    cells = [f"c{i}" for i in range(1, 9)]
+    program_activity = pd.DataFrame(
+        {
+            "cell_id": cells,
+            "p_state": [1, 1, 0.9, 0.8, 0.1, 0.2, 0.1, 0.0],
+            "p_random": [0.2, 0.4, 0.1, 0.7, 0.3, 0.6, 0.5, 0.2],
+            "p_ribo": [0.0, 0.1, 0.2, 0.1, 0.8, 0.9, 1.0, 0.9],
+        }
+    )
+    state_activity_rows = []
+    state_profiles = {
+        "state_a": [1, 1, 0.9, 0.8, 0.1, 0.2, 0.1, 0.0],
+        "state_random": [0.4, 0.2, 0.6, 0.1, 0.5, 0.3, 0.7, 0.2],
+        "state_low_coverage": [0.1] * 8,
+        "qc_bad_ribosomal_translation_high": [0.0, 0.1, 0.2, 0.1, 0.8, 0.9, 1.0, 0.9],
+    }
+    for state_name, values in state_profiles.items():
+        for cell, value in zip(cells, values):
+            state_activity_rows.append(
+                {
+                    "cell_id": cell,
+                    "state_name": state_name,
+                    "state_type": "qc_state" if state_name.startswith("qc_") else "curated_state",
+                    "state_activity_weight_gradient": value,
+                    "state_activity_weight_hightail": max(0, value - 0.5),
+                    "aucell_score": value,
+                    "ucell_score": value,
+                }
+            )
+    state_expression_rows = []
+    for state_name in ["state_a", "state_random"]:
+        for weight_type in ["gradient_percentile_squared", "high_tail_percentile_90_100"]:
+            for gene in ["G1", "G2", "G3", "G4", "G5", "R1", "R2", "R3", "R4", "R5", "RPL1", "RPL2", "RPL3"]:
+                state_expression_rows.append(
+                    {
+                        "gene": gene,
+                        "state_name": state_name,
+                        "state_weight_type": weight_type,
+                        "weighted_mean_cp10k": 10 if gene.startswith("G") and state_name == "state_a" else 1,
+                        "log1p_weighted_mean_cp10k": 2.0 if gene.startswith("G") and state_name == "state_a" else 0.1,
+                        "weighted_pct_detected": 0.9,
+                        "log2fc_weighted_vs_all_parent": 3 if gene.startswith("G") and state_name == "state_a" else -0.2,
+                        "p_value": 0.001,
+                        "q_value": 0.01,
+                    }
+                )
+    metadata = pd.DataFrame({"cell_id": cells, "donor_id": ["d1", "d1", "d2", "d2", "d3", "d3", "d4", "d4"]})
+    loadings_path = tmpdir / "program_loadings.tsv"
+    state_gmt = tmpdir / "states.gmt"
+    qc_gmt = tmpdir / "qc.gmt"
+    program_activity_path = tmpdir / "program_activity.tsv"
+    state_activity_path = tmpdir / "cell_state_activity.tsv"
+    state_expression_path = tmpdir / "state_expression.tsv"
+    metadata_path = tmpdir / "metadata.tsv"
+    out_dir = tmpdir / "program_matches"
+    marker_only_out = tmpdir / "program_matches_marker_only"
+    program_loadings.to_csv(loadings_path, sep="\t", index=False)
+    state_gmt.write_text(
+        "\n".join(
+            [
+                "state_a\ttoy\tG1\tG2\tG3\tG4\tG5",
+                "state_random\ttoy\tR1\tR2\tR3\tR4\tR5",
+                "state_low_coverage\ttoy\tMISSING1\tMISSING2\tG1",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    qc_gmt.write_text("qc_bad_ribosomal_translation_high\tcategory=technical;tier=review\tRPL1\tRPL2\tRPL3\tRPL4\tRPL5\n", encoding="utf-8")
+    program_activity.to_csv(program_activity_path, sep="\t", index=False)
+    pd.DataFrame(state_activity_rows).to_csv(state_activity_path, sep="\t", index=False)
+    pd.DataFrame(state_expression_rows).to_csv(state_expression_path, sep="\t", index=False)
+    metadata.to_csv(metadata_path, sep="\t", index=False)
+
+    run_cmd(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "match_programs_to_cell_states.py"),
+            "--program-loadings",
+            str(loadings_path),
+            "--state-gmt",
+            str(state_gmt),
+            "--qc-gmt",
+            str(qc_gmt),
+            "--program-cell-activity",
+            str(program_activity_path),
+            "--cell-state-activity",
+            str(state_activity_path),
+            "--state-expression",
+            str(state_expression_path),
+            "--metadata",
+            str(metadata_path),
+            "--out-dir",
+            str(out_dir),
+            "--tissue",
+            "tissue_a",
+            "--cell-type",
+            "cell_type_a",
+            "--gsea-permutations",
+            "99",
+            "--random-seed",
+            "7",
+        ]
+    )
+    marker = pd.read_csv(out_dir / "program_state_marker_enrichment.tsv.gz", sep="\t")
+    summary = pd.read_csv(out_dir / "program_state_match_summary.tsv.gz", sep="\t").set_index(["program_id", "state_id"])
+    labels = pd.read_csv(out_dir / "program_label_suggestions.tsv.gz", sep="\t").set_index("program_id")
+    qc_summary = pd.read_csv(out_dir / "program_qc_match_summary.tsv.gz", sep="\t").set_index("program_id")
+    corr = pd.read_csv(out_dir / "program_state_cell_correlation.tsv.gz", sep="\t")
+    expr = pd.read_csv(out_dir / "program_state_expression_score_match.tsv.gz", sep="\t")
+
+    assert summary.loc[("p_state", "state_a"), "match_class"] == "strong_state_match"
+    assert summary.loc[("p_state", "state_a"), "loading_auc"] > 0.9
+    assert summary.loc[("p_random", "state_a"), "match_class"] == "unmatched"
+    assert summary.loc[("p_state", "state_low_coverage"), "match_class"] == "insufficient_marker_coverage"
+    missing = marker.set_index(["program_id", "state_id"]).loc[("p_state", "state_low_coverage"), "missing_state_markers"]
+    assert "MISSING1" in missing and "MISSING2" in missing
+    assert summary.loc[("p_ribo", "qc_bad_ribosomal_translation_high"), "match_class"] == "qc_dominated"
+    assert qc_summary.loc["p_ribo", "qc_recommendation"] in {"review", "suppress_or_hide_by_default"}
+    assert labels.loc["p_ribo", "suggested_program_quality_class"] == "qc_or_artifact"
+    assert set(marker["state_type"]) == {"curated_state", "qc_state"}
+    assert (corr["state_activity_column"] == "state_activity_weight_gradient").any()
+    assert not expr.empty
+    assert (out_dir / "program_state_heatmap_matrix.tsv.gz").exists()
+
+    run_cmd(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "match_programs_to_cell_states.py"),
+            "--program-loadings",
+            str(loadings_path),
+            "--state-gmt",
+            str(state_gmt),
+            "--out-dir",
+            str(marker_only_out),
+            "--gsea-permutations",
+            "9",
+        ]
+    )
+    assert pd.read_csv(marker_only_out / "program_state_marker_enrichment.tsv.gz", sep="\t").shape[0] == 9
+    assert pd.read_csv(marker_only_out / "program_state_cell_correlation.tsv.gz", sep="\t").empty
+    assert "missing_cell_state_activity" in json.loads((marker_only_out / "run_summary.json").read_text(encoding="utf-8"))["warnings"]
+
+
 def test_subset_10x_single_and_split_by(tmpdir: Path) -> None:
     input_dir = tmpdir / "tenx"
     input_dir.mkdir()
@@ -1030,6 +1186,7 @@ def main() -> None:
         test_call_states_from_scores(tmpdir)
         test_cmdkp_general_runner(tmpdir)
         test_assign_genes_to_states(tmpdir)
+        test_match_programs_to_cell_states(tmpdir)
         test_manifest_splitter_and_batch_dry_run(tmpdir)
         test_batch_runner_real_small_with_missing_gmt(tmpdir)
     print("smoke tests OK")
