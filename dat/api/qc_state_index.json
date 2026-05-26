@@ -1,0 +1,258 @@
+{
+  "n_qc_signatures": 36,
+  "qc_signatures": [
+    {
+      "category": "technical_low_quality",
+      "display_name": "Mitochondrial transcripts",
+      "qc_signature_id": "qc_bad_mitochondrial_transcripts",
+      "recommended_use": "hard_exclude_if_extreme",
+      "tier": "hard_exclude_if_extreme"
+    },
+    {
+      "category": "technical_or_composition",
+      "display_name": "Ribosomal translation high",
+      "qc_signature_id": "qc_bad_ribosomal_translation_high",
+      "recommended_use": "review_exclude_if_extreme",
+      "tier": "review_exclude_if_extreme"
+    },
+    {
+      "category": "dying_cell",
+      "display_name": "Apoptosis cell death",
+      "qc_signature_id": "qc_bad_apoptosis_cell_death",
+      "recommended_use": "hard_exclude_if_high",
+      "tier": "hard_exclude_if_high"
+    },
+    {
+      "category": "blood_ambient_or_contaminant",
+      "display_name": "Hemoglobin rbc contamination",
+      "qc_signature_id": "qc_bad_hemoglobin_rbc_contamination",
+      "recommended_use": "hard_exclude_if_incompatible",
+      "tier": "hard_exclude_if_incompatible"
+    },
+    {
+      "category": "blood_ambient_or_contaminant",
+      "display_name": "Platelet contamination",
+      "qc_signature_id": "qc_bad_platelet_contamination",
+      "recommended_use": "hard_exclude_if_incompatible",
+      "tier": "hard_exclude_if_incompatible"
+    },
+    {
+      "category": "processing_stress",
+      "display_name": "Heat shock dissociation stress",
+      "qc_signature_id": "qc_bad_heat_shock_dissociation_stress",
+      "recommended_use": "review_exclude_if_extreme",
+      "tier": "review_exclude_if_extreme"
+    },
+    {
+      "category": "processing_or_activation_stress",
+      "display_name": "Immediate early response",
+      "qc_signature_id": "qc_bad_immediate_early_response",
+      "recommended_use": "review_exclude_if_extreme",
+      "tier": "review_exclude_if_extreme"
+    },
+    {
+      "category": "unexpected_lineage_or_artifact",
+      "display_name": "Motile cilia artifact",
+      "qc_signature_id": "qc_bad_motile_cilia_artifact",
+      "recommended_use": "hard_exclude_if_incompatible",
+      "tier": "hard_exclude_if_incompatible"
+    },
+    {
+      "category": "unexpected_lineage_or_artifact",
+      "display_name": "Germline meiotic artifact",
+      "qc_signature_id": "qc_bad_germline_meiotic_artifact",
+      "recommended_use": "hard_exclude_if_high",
+      "tier": "hard_exclude_if_high"
+    },
+    {
+      "category": "offtarget_identity",
+      "display_name": "Pan leukocyte identity",
+      "qc_signature_id": "qc_bad_pan_leukocyte_identity",
+      "recommended_use": "hard_exclude_if_incompatible",
+      "tier": "hard_exclude_if_incompatible"
+    },
+    {
+      "category": "offtarget_identity",
+      "display_name": "Lymphocyte identity",
+      "qc_signature_id": "qc_bad_lymphocyte_identity",
+      "recommended_use": "hard_exclude_if_incompatible",
+      "tier": "hard_exclude_if_incompatible"
+    },
+    {
+      "category": "offtarget_identity",
+      "display_name": "Myeloid mast identity",
+      "qc_signature_id": "qc_bad_myeloid_mast_identity",
+      "recommended_use": "hard_exclude_if_incompatible",
+      "tier": "hard_exclude_if_incompatible"
+    },
+    {
+      "category": "offtarget_identity",
+      "display_name": "Endothelial identity",
+      "qc_signature_id": "qc_bad_endothelial_identity",
+      "recommended_use": "hard_exclude_if_incompatible",
+      "tier": "hard_exclude_if_incompatible"
+    },
+    {
+      "category": "offtarget_identity",
+      "display_name": "Lymphatic endothelial identity",
+      "qc_signature_id": "qc_bad_lymphatic_endothelial_identity",
+      "recommended_use": "hard_exclude_if_incompatible",
+      "tier": "hard_exclude_if_incompatible"
+    },
+    {
+      "category": "offtarget_identity",
+      "display_name": "Mural pericyte smc identity",
+      "qc_signature_id": "qc_bad_mural_pericyte_smc_identity",
+      "recommended_use": "hard_exclude_if_incompatible",
+      "tier": "hard_exclude_if_incompatible"
+    },
+    {
+      "category": "offtarget_identity",
+      "display_name": "Fibroblast mesenchymal identity",
+      "qc_signature_id": "qc_bad_fibroblast_mesenchymal_identity",
+      "recommended_use": "hard_exclude_if_incompatible",
+      "tier": "hard_exclude_if_incompatible"
+    },
+    {
+      "category": "offtarget_identity",
+      "display_name": "Epithelial identity",
+      "qc_signature_id": "qc_bad_epithelial_identity",
+      "recommended_use": "hard_exclude_if_incompatible",
+      "tier": "hard_exclude_if_incompatible"
+    },
+    {
+      "category": "offtarget_identity",
+      "display_name": "Mesothelial epicardial identity",
+      "qc_signature_id": "qc_bad_mesothelial_epicardial_identity",
+      "recommended_use": "hard_exclude_if_incompatible",
+      "tier": "hard_exclude_if_incompatible"
+    },
+    {
+      "category": "offtarget_identity",
+      "display_name": "Adipocyte identity",
+      "qc_signature_id": "qc_bad_adipocyte_identity",
+      "recommended_use": "hard_exclude_if_incompatible",
+      "tier": "hard_exclude_if_incompatible"
+    },
+    {
+      "category": "offtarget_identity",
+      "display_name": "Hepatobiliary identity",
+      "qc_signature_id": "qc_bad_hepatobiliary_identity",
+      "recommended_use": "hard_exclude_if_incompatible",
+      "tier": "hard_exclude_if_incompatible"
+    },
+    {
+      "category": "offtarget_identity",
+      "display_name": "Pancreas endocrine identity",
+      "qc_signature_id": "qc_bad_pancreas_endocrine_identity",
+      "recommended_use": "hard_exclude_if_incompatible",
+      "tier": "hard_exclude_if_incompatible"
+    },
+    {
+      "category": "offtarget_identity",
+      "display_name": "Pancreas exocrine ductal identity",
+      "qc_signature_id": "qc_bad_pancreas_exocrine_ductal_identity",
+      "recommended_use": "hard_exclude_if_incompatible",
+      "tier": "hard_exclude_if_incompatible"
+    },
+    {
+      "category": "offtarget_identity",
+      "display_name": "Cardiac skeletal muscle identity",
+      "qc_signature_id": "qc_bad_cardiac_skeletal_muscle_identity",
+      "recommended_use": "hard_exclude_if_incompatible",
+      "tier": "hard_exclude_if_incompatible"
+    },
+    {
+      "category": "offtarget_identity",
+      "display_name": "Tendon enthesis matrix identity",
+      "qc_signature_id": "qc_bad_tendon_enthesis_matrix_identity",
+      "recommended_use": "hard_exclude_if_incompatible",
+      "tier": "hard_exclude_if_incompatible"
+    },
+    {
+      "category": "offtarget_identity",
+      "display_name": "Neural glial identity",
+      "qc_signature_id": "qc_bad_neural_glial_identity",
+      "recommended_use": "hard_exclude_if_incompatible",
+      "tier": "hard_exclude_if_incompatible"
+    },
+    {
+      "category": "offtarget_identity",
+      "display_name": "Kidney epithelial identity",
+      "qc_signature_id": "qc_bad_kidney_epithelial_identity",
+      "recommended_use": "hard_exclude_if_incompatible",
+      "tier": "hard_exclude_if_incompatible"
+    },
+    {
+      "category": "offtarget_identity",
+      "display_name": "Endometrial epithelial identity",
+      "qc_signature_id": "qc_bad_endometrial_epithelial_identity",
+      "recommended_use": "hard_exclude_if_incompatible",
+      "tier": "hard_exclude_if_incompatible"
+    },
+    {
+      "category": "ambient_rna",
+      "display_name": "Ambient pancreas islet exocrine high expression",
+      "qc_signature_id": "qc_bad_ambient_pancreas_islet_exocrine_high_expression",
+      "recommended_use": "hard_exclude_if_incompatible",
+      "tier": "hard_exclude_if_incompatible"
+    },
+    {
+      "category": "ambient_rna",
+      "display_name": "Ambient liver high expression",
+      "qc_signature_id": "qc_bad_ambient_liver_high_expression",
+      "recommended_use": "hard_exclude_if_incompatible",
+      "tier": "hard_exclude_if_incompatible"
+    },
+    {
+      "category": "ambient_rna",
+      "display_name": "Ambient muscle high expression",
+      "qc_signature_id": "qc_bad_ambient_muscle_high_expression",
+      "recommended_use": "hard_exclude_if_incompatible",
+      "tier": "hard_exclude_if_incompatible"
+    },
+    {
+      "category": "ambient_rna",
+      "display_name": "Ambient heart high expression",
+      "qc_signature_id": "qc_bad_ambient_heart_high_expression",
+      "recommended_use": "hard_exclude_if_incompatible",
+      "tier": "hard_exclude_if_incompatible"
+    },
+    {
+      "category": "ambient_rna",
+      "display_name": "Ambient kidney high expression",
+      "qc_signature_id": "qc_bad_ambient_kidney_high_expression",
+      "recommended_use": "hard_exclude_if_incompatible",
+      "tier": "hard_exclude_if_incompatible"
+    },
+    {
+      "category": "ambient_rna",
+      "display_name": "Ambient adipose high expression",
+      "qc_signature_id": "qc_bad_ambient_adipose_high_expression",
+      "recommended_use": "hard_exclude_if_incompatible",
+      "tier": "hard_exclude_if_incompatible"
+    },
+    {
+      "category": "ambient_rna",
+      "display_name": "Ambient brain hypothalamus high expression",
+      "qc_signature_id": "qc_bad_ambient_brain_hypothalamus_high_expression",
+      "recommended_use": "hard_exclude_if_incompatible",
+      "tier": "hard_exclude_if_incompatible"
+    },
+    {
+      "category": "ambient_rna",
+      "display_name": "Ambient vascular blood high expression",
+      "qc_signature_id": "qc_bad_ambient_vascular_blood_high_expression",
+      "recommended_use": "hard_exclude_if_incompatible",
+      "tier": "hard_exclude_if_incompatible"
+    },
+    {
+      "category": "ambient_rna",
+      "display_name": "Ambient tendon matrix high expression",
+      "qc_signature_id": "qc_bad_ambient_tendon_matrix_high_expression",
+      "recommended_use": "hard_exclude_if_incompatible",
+      "tier": "hard_exclude_if_incompatible"
+    }
+  ],
+  "schema_version": "1.0"
+}

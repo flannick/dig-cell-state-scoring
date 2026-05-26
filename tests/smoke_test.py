@@ -21,6 +21,49 @@ def run_cmd(args: list[str]) -> None:
     subprocess.run(args, check=True)
 
 
+def test_curated_cell_state_api_json_build(tmpdir: Path) -> None:
+    out_dir = tmpdir / "api"
+    run_cmd(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "build_curated_cell_state_api_json.py"),
+            "--dat-dir",
+            str(ROOT / "dat"),
+            "--out-dir",
+            str(out_dir),
+            "--curation-version",
+            "2026-05-26",
+        ]
+    )
+
+    index = json.loads((out_dir / "cell_state_index.json").read_text(encoding="utf-8"))
+    details = json.loads((out_dir / "cell_state_details_by_id.json").read_text(encoding="utf-8"))
+    state_id = "pancreas_beta_cell_mature_beta_cell_identity"
+    expected_markers = {"INS", "IAPP", "MAFA", "PDX1", "NKX6-1", "NEUROD1", "PCSK1", "PCSK2", "SLC30A8", "G6PC2"}
+
+    assert state_id in details
+    observed_markers = {row["gene"] for row in details[state_id]["marker_set"]["markers"]}
+    assert expected_markers.issubset(observed_markers)
+
+    pancreas = next(tissue for tissue in index["tissues"] if tissue["tissue_id"] == "pancreas")
+    beta = next(cell_type for cell_type in pancreas["cell_types"] if cell_type["cell_type_id"] == "beta_cell")
+    assert any(state["state_id"] == state_id for state in beta["states"])
+
+    indexed_state_ids = {
+        state["state_id"]
+        for tissue in index["tissues"]
+        for cell_type in tissue["cell_types"]
+        for state in cell_type["states"]
+    }
+    assert indexed_state_ids
+    assert indexed_state_ids.issubset(details)
+    for indexed_state_id in indexed_state_ids:
+        detail = details[indexed_state_id]
+        markers = detail["marker_set"]["markers"]
+        low_coverage = "low_coverage" in detail["quality"]["known_limitations"]
+        assert len(markers) >= 5 or low_coverage
+
+
 def test_subset_10x_single_and_split_by(tmpdir: Path) -> None:
     input_dir = tmpdir / "tenx"
     input_dir.mkdir()

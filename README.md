@@ -13,6 +13,10 @@ The toolkit is intentionally map-agnostic. The current production workflow is:
 
 Older selected-gene scripts remain for compatibility and small exploratory analyses, but they are not the recommended portal-scale workflow.
 
+The packaged curated marker workbooks and GMT files can also be converted into
+API-ready JSON with `scripts/build_curated_cell_state_api_json.py`; see
+[docs/cell_state_api_json.md](docs/cell_state_api_json.md).
+
 ## Production Quick Start
 
 For one tissue/cell-type group, run the individual scripts with a full sparse rank universe and a group-specific GMT:
