@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import warnings
 import argparse
 import gzip
 import json
@@ -17,6 +18,8 @@ import numpy as np
 import pandas as pd
 import scipy
 from scipy import stats
+
+warnings.filterwarnings("ignore", message="Mean of empty slice", category=RuntimeWarning)
 
 
 PROGRAM_ALIASES = ("program_id", "program", "factor", "module", "component")
@@ -104,6 +107,16 @@ def parse_list(value: str, cast=str) -> list[Any]:
     return [cast(x.strip()) for x in str(value).split(",") if x.strip()]
 
 
+def canonical_cell_id(value: Any) -> str:
+    text = str(value).strip()
+    if not text:
+        return ""
+    text = re.sub(r"_1$", "", text)
+    if text.startswith("SRR"):
+        text = text.replace("_", "-")
+    return text
+
+
 def read_gmt(path: Path, state_type: str) -> pd.DataFrame:
     rows = []
     with open_text(path) as handle:
@@ -178,9 +191,10 @@ def load_program_cell_activity(path: Path) -> pd.DataFrame:
         cell_col = frame.columns[0]
         out = frame.melt(id_vars=[cell_col], var_name="program_id", value_name="program_activity").rename(columns={cell_col: "cell_id"})
     out["cell_id"] = out["cell_id"].astype(str).str.strip()
+    out["cell_id_match"] = out["cell_id"].map(canonical_cell_id)
     out["program_id"] = out["program_id"].astype(str).str.strip()
     out["program_activity"] = pd.to_numeric(out["program_activity"], errors="coerce")
-    return out.loc[out["cell_id"].ne("") & out["program_id"].ne("") & out["program_activity"].notna()].copy()
+    return out.loc[out["cell_id"].ne("") & out["cell_id_match"].ne("") & out["program_id"].ne("") & out["program_activity"].notna()].copy()
 
 
 def gsea_es_for_hit_indices(loadings: np.ndarray, hit_indices: np.ndarray, weight: float) -> tuple[float, int]:
@@ -426,6 +440,8 @@ def compute_cell_correlations(
     state_label = states.set_index("state_id")["state_label"].to_dict()
     state_activity = cell_state_activity.copy()
     state_activity["state_id"] = state_activity["state_name"].astype(str)
+    state_activity["cell_id"] = state_activity["cell_id"].astype(str)
+    state_activity["cell_id_match"] = state_activity["cell_id"].map(canonical_cell_id)
     if "state_type" not in state_activity.columns:
         state_activity["state_type"] = state_activity["state_id"].map(state_type).fillna("curated_state")
     rows = []
@@ -433,15 +449,16 @@ def compute_cell_correlations(
     if metadata is not None and args.donor_col in metadata.columns and "cell_id" in metadata.columns:
         meta = metadata[["cell_id", args.donor_col]].dropna().copy()
         meta["cell_id"] = meta["cell_id"].astype(str)
+        meta["cell_id_match"] = meta["cell_id"].map(canonical_cell_id)
     for activity_col in STATE_ACTIVITY_COLUMNS:
         if activity_col not in state_activity.columns:
             continue
-        state_sub = state_activity[["cell_id", "state_id", "state_type", activity_col]].rename(columns={activity_col: "state_activity"})
+        state_sub = state_activity[["cell_id", "cell_id_match", "state_id", "state_type", activity_col]].rename(columns={activity_col: "state_activity"})
         state_sub["state_activity"] = pd.to_numeric(state_sub["state_activity"], errors="coerce")
         for program, prog in program_activity.groupby("program_id", sort=False):
-            prog = prog[["cell_id", "program_activity"]]
+            prog = prog[["cell_id", "cell_id_match", "program_activity"]]
             for state_id, st in state_sub.groupby("state_id", sort=False):
-                merged = prog.merge(st[["cell_id", "state_activity"]], on="cell_id", how="inner").dropna()
+                merged = prog.merge(st[["cell_id_match", "state_activity"]], on="cell_id_match", how="inner").dropna()
                 row = {
                     "tissue": tissue,
                     "cell_type": cell_type,
@@ -465,7 +482,7 @@ def compute_cell_correlations(
                     row["cell_spearman_r"] = float(corr.statistic)
                     row["cell_spearman_p"] = float(corr.pvalue)
                 if meta is not None and len(merged):
-                    donor = merged.merge(meta, on="cell_id", how="inner")
+                    donor = merged.merge(meta[["cell_id_match", args.donor_col]], on="cell_id_match", how="inner")
                     donor = donor.groupby(args.donor_col)[["program_activity", "state_activity"]].mean()
                     row["n_donors"] = int(len(donor))
                     if len(donor) >= 3 and donor["program_activity"].nunique() > 1 and donor["state_activity"].nunique() > 1:
@@ -717,6 +734,7 @@ def main() -> None:
     ap.add_argument("--state-gene-score-col", default="log2fc_weighted_vs_all_parent")
     ap.add_argument("--random-seed", type=int, default=1)
     ap.add_argument("--include-qc", default=None, choices=["true", "false"])
+    ap.add_argument("--api-minimal-output", action="store_true", help="Write only compact program-state outputs needed by portal APIs.")
     args = ap.parse_args()
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
@@ -756,15 +774,29 @@ def main() -> None:
     if small_programs:
         warnings.append("programs_with_small_gene_universe")
 
-    write_table(marker, args.out_dir / "program_state_marker_enrichment.tsv.gz")
-    write_table(expr, args.out_dir / "program_state_expression_score_match.tsv.gz")
-    write_table(corr, args.out_dir / "program_state_cell_correlation.tsv.gz")
-    write_table(summary, args.out_dir / "program_state_match_summary.tsv.gz")
-    write_table(heat_wide, args.out_dir / "program_state_heatmap_matrix.tsv.gz")
-    write_table(heat_long, args.out_dir / "program_state_heatmap_long.tsv.gz")
-    if qc_count:
-        write_table(qc_summary, args.out_dir / "program_qc_match_summary.tsv.gz")
-    write_table(labels, args.out_dir / "program_label_suggestions.tsv.gz")
+    if args.api_minimal_output:
+        heat_api = summary.copy()
+        heat_api["correlation"] = heat_api.get("cell_spearman_r_gradient", np.nan)
+        heat_cols = ["tissue", "cell_type", "state_id", "program_id", "correlation", "gsea_p", "gsea_q"]
+        for col in heat_cols:
+            if col not in heat_api.columns:
+                heat_api[col] = "" if col in {"tissue", "cell_type", "state_id", "program_id"} else np.nan
+        write_table(heat_api[heat_cols], args.out_dir / "program_state_heatmap_long.tsv.gz")
+        factor_cols = ["program_id", "best_curated_state_id", "best_curated_state_label", "best_curated_match_class", "best_qc_state_id", "best_qc_label", "qc_caveat", "suggested_program_label", "suggested_program_quality_class"]
+        for col in factor_cols:
+            if col not in labels.columns:
+                labels[col] = ""
+        write_table(labels[factor_cols], args.out_dir / "program_label_suggestions.tsv.gz")
+    else:
+        write_table(marker, args.out_dir / "program_state_marker_enrichment.tsv.gz")
+        write_table(expr, args.out_dir / "program_state_expression_score_match.tsv.gz")
+        write_table(corr, args.out_dir / "program_state_cell_correlation.tsv.gz")
+        write_table(summary, args.out_dir / "program_state_match_summary.tsv.gz")
+        write_table(heat_wide, args.out_dir / "program_state_heatmap_matrix.tsv.gz")
+        write_table(heat_long, args.out_dir / "program_state_heatmap_long.tsv.gz")
+        if qc_count:
+            write_table(qc_summary, args.out_dir / "program_qc_match_summary.tsv.gz")
+        write_table(labels, args.out_dir / "program_label_suggestions.tsv.gz")
 
     run_summary = {
         "input_files": {
