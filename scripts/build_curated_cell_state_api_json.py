@@ -97,6 +97,14 @@ class StateRecord:
     negative_checks: str = ""
     disease_context: str = ""
     display_order: str = ""
+    portal_user_summary: str = ""
+    gene_expression_interpretation: str = ""
+    gene_expression_caveat: str = ""
+    gene_expression_followup: str = ""
+    gene_expression_overinterpretation_warning: str = ""
+    portal_display_establishment: str = ""
+    portal_primary_badges: list[str] = field(default_factory=list)
+    portal_methods_details: str = ""
 
 
 def open_text(path: Path):
@@ -255,8 +263,18 @@ def apply_portal_metadata_rules(state: "StateRecord", rules: dict[str, Any], ove
             "portal_visibility",
             "hard_call_notes",
             "state_establishment_rationale",
+            "portal_user_summary",
+            "gene_expression_interpretation",
+            "gene_expression_caveat",
+            "gene_expression_followup",
+            "gene_expression_overinterpretation_warning",
+            "portal_display_establishment",
+            "portal_methods_details",
         ]:
-            apply_if_not_excel(state, attr, rule.get(attr))
+            value = rule.get(attr)
+            if value is None and rule.get(f"{attr}_template"):
+                value = template_text(rule.get(f"{attr}_template", ""), state)
+            apply_if_not_excel(state, attr, value)
         if "allow_hard_call" not in state.excel_metadata_fields and "allow_hard_call" in rule:
             state.allow_hard_call = bool(rule.get("allow_hard_call"))
         if "is_composite_required" not in state.excel_metadata_fields and "is_composite_required" in rule:
@@ -265,6 +283,7 @@ def apply_portal_metadata_rules(state: "StateRecord", rules: dict[str, Any], ove
         apply_if_not_excel(state, "biological_description", description)
         apply_if_not_excel(state, "interpretation_caveat", rule.get("interpretation_caveat"))
         apply_if_not_excel(state, "quality_badges", rule.get("quality_badges"))
+        apply_if_not_excel(state, "portal_primary_badges", rule.get("portal_primary_badges"))
         state.provenance_warnings.append(f"portal_metadata_rule:{archetype_name}")
 
     text = " ".join([state.state_id, state.state_label, state.display_name])
@@ -280,10 +299,19 @@ def apply_portal_metadata_rules(state: "StateRecord", rules: dict[str, Any], ove
             "required_supporting_evidence",
             "do_not_overinterpret_as",
             "qc_sensitivity",
+            "portal_user_summary",
+            "gene_expression_interpretation",
+            "gene_expression_caveat",
+            "gene_expression_followup",
+            "gene_expression_overinterpretation_warning",
+            "portal_display_establishment",
+            "portal_methods_details",
         ]:
             apply_if_not_excel(state, attr, override.get(attr))
         if "quality_badges" not in state.excel_metadata_fields and override.get("quality_badges"):
             state.quality_badges = split_list_field(override["quality_badges"])
+        if "portal_primary_badges" not in state.excel_metadata_fields and override.get("portal_primary_badges"):
+            state.portal_primary_badges = split_list_field(override["portal_primary_badges"])
         state.provenance_warnings.append("ambiguous_language_override_applied")
         break
 
@@ -305,6 +333,34 @@ def apply_portal_metadata_rules(state: "StateRecord", rules: dict[str, Any], ove
         state.provenance_warnings.append("state_establishment_level_inferred")
     if not state.quality_badges:
         state.quality_badges = ["Curated marker panel"]
+    if not state.portal_primary_badges:
+        state.portal_primary_badges = list(state.quality_badges)
+    if not state.portal_user_summary:
+        state.portal_user_summary = f"{state.state_label} is a curated marker panel for {state.cell_type_label} in {state.tissue_label}."
+        state.provenance_warnings.append("portal_user_summary_inferred")
+    if not state.gene_expression_interpretation:
+        state.gene_expression_interpretation = "If your gene is enriched here, it may be associated with this curated marker context, but the biological interpretation needs more specific review."
+        state.provenance_warnings.append("gene_expression_interpretation_inferred")
+    if not state.gene_expression_caveat:
+        state.gene_expression_caveat = "This state currently lacks a finalized gene-centric interpretation."
+        state.provenance_warnings.append("gene_expression_caveat_inferred")
+    if not state.gene_expression_followup:
+        state.gene_expression_followup = "Review marker genes, references, expression in related states, and program matches before drawing conclusions."
+        state.provenance_warnings.append("gene_expression_followup_inferred")
+    if not state.gene_expression_overinterpretation_warning:
+        state.gene_expression_overinterpretation_warning = "Do not treat this as a definitive biological state until metadata review is complete."
+        state.provenance_warnings.append("gene_expression_overinterpretation_warning_inferred")
+    if not state.portal_display_establishment:
+        state.portal_display_establishment = display_label(state.state_establishment_level.replace("_", " ")) if state.state_establishment_level else "Needs metadata review"
+    if not state.portal_methods_details:
+        parts = [
+            f"Score scope: {state.score_scope or 'within_tissue_cell_type'}",
+            f"Hard-call policy: {state.hard_call_notes or 'Use continuous activity scores by default.'}",
+            f"QC sensitivity: {state.qc_sensitivity or 'none'}",
+        ]
+        if state.required_supporting_evidence:
+            parts.append(f"Supporting evidence for assigning cells: {state.required_supporting_evidence}")
+        state.portal_methods_details = "; ".join(parts)
     if state.state_class == "composite_required":
         state.is_composite_required = True
     if state.state_class in {"broad_identity_gradient", "broad_function_gradient", "process_gradient", "composite_required", "unknown"}:
@@ -363,6 +419,14 @@ def canonical_columns(frame: pd.DataFrame) -> dict[str, str]:
         "negative_checks": ("negative_checks", "negative checks"),
         "disease_context": ("disease_context", "disease context"),
         "display_order": ("display_order", "display order"),
+        "portal_user_summary": ("portal_user_summary", "portal user summary"),
+        "gene_expression_interpretation": ("gene_expression_interpretation", "gene expression interpretation"),
+        "gene_expression_caveat": ("gene_expression_caveat", "gene expression caveat"),
+        "gene_expression_followup": ("gene_expression_followup", "gene expression followup", "gene expression follow-up"),
+        "gene_expression_overinterpretation_warning": ("gene_expression_overinterpretation_warning", "gene expression overinterpretation warning"),
+        "portal_display_establishment": ("portal_display_establishment", "portal display establishment"),
+        "portal_primary_badges": ("portal_primary_badges", "portal primary badges"),
+        "portal_methods_details": ("portal_methods_details", "portal methods details"),
     }
     by_norm = {norm_key(col): col for col in frame.columns}
     for canonical, names in aliases.items():
@@ -569,6 +633,13 @@ def apply_state_metadata(state: StateRecord, row: pd.Series, cols: dict[str, str
         ("negative_checks", "negative_checks"),
         ("disease_context", "disease_context"),
         ("display_order", "display_order"),
+        ("portal_user_summary", "portal_user_summary"),
+        ("gene_expression_interpretation", "gene_expression_interpretation"),
+        ("gene_expression_caveat", "gene_expression_caveat"),
+        ("gene_expression_followup", "gene_expression_followup"),
+        ("gene_expression_overinterpretation_warning", "gene_expression_overinterpretation_warning"),
+        ("portal_display_establishment", "portal_display_establishment"),
+        ("portal_methods_details", "portal_methods_details"),
     ]:
         value = row_value(row, cols, key)
         if value:
@@ -580,6 +651,11 @@ def apply_state_metadata(state: StateRecord, row: pd.Series, cols: dict[str, str
         state.excel_metadata_fields.add("quality_badges")
         if not state.quality_badges:
             state.quality_badges = split_list_field(badges)
+    portal_badges = row_value(row, cols, "portal_primary_badges")
+    if portal_badges:
+        state.excel_metadata_fields.add("portal_primary_badges")
+        if not state.portal_primary_badges:
+            state.portal_primary_badges = split_list_field(portal_badges)
     notes = row_value(row, cols, "notes")
     if notes and notes not in state.curation_notes:
         state.curation_notes = "; ".join(x for x in [state.curation_notes, notes] if x)
@@ -807,6 +883,14 @@ def state_manifest_v2_row(state: StateRecord, curation_version: str) -> dict[str
         "recommended_portal_label": state.recommended_portal_label or state.display_name,
         "state_label": state.state_label,
         "state_class": state.state_class,
+        "portal_user_summary": state.portal_user_summary,
+        "gene_expression_interpretation": state.gene_expression_interpretation,
+        "gene_expression_caveat": state.gene_expression_caveat,
+        "gene_expression_followup": state.gene_expression_followup,
+        "gene_expression_overinterpretation_warning": state.gene_expression_overinterpretation_warning,
+        "portal_display_establishment": state.portal_display_establishment,
+        "portal_primary_badges": ";".join(state.portal_primary_badges),
+        "portal_methods_details": state.portal_methods_details,
         "biological_description": state.biological_description,
         "state_establishment_level": state.state_establishment_level,
         "state_establishment_rationale": state.state_establishment_rationale,
@@ -921,6 +1005,14 @@ def detail_object(state: StateRecord, curation_version: str, citations: dict[str
         },
         "summary": {
             "short_description": state.short_description,
+            "portal_user_summary": state.portal_user_summary,
+            "gene_expression_interpretation": state.gene_expression_interpretation,
+            "gene_expression_caveat": state.gene_expression_caveat,
+            "gene_expression_followup": state.gene_expression_followup,
+            "gene_expression_overinterpretation_warning": state.gene_expression_overinterpretation_warning,
+            "portal_display_establishment": state.portal_display_establishment,
+            "portal_primary_badges": state.portal_primary_badges,
+            "portal_methods_details": state.portal_methods_details,
             "biological_description": state.biological_description,
             "recommended_portal_label": state.recommended_portal_label or state.display_name,
             "recommended_portal_summary": state.recommended_portal_summary,
@@ -1005,6 +1097,9 @@ def build_index(states: list[StateRecord], curation_version: str) -> dict[str, A
                 "state_label": state.state_label,
                 "display_name": state.display_name,
                 "recommended_portal_label": state.recommended_portal_label or state.display_name,
+                "portal_user_summary": state.portal_user_summary,
+                "portal_display_establishment": state.portal_display_establishment,
+                "portal_primary_badges": state.portal_primary_badges,
                 "biological_description": state.biological_description,
                 "state_establishment_level": state.state_establishment_level,
                 "state_class": state.state_class,
@@ -1179,6 +1274,14 @@ def main() -> None:
         "states_missing_biological_description": [sid for sid, state in states.items() if not state.biological_description],
         "states_missing_establishment_level": [sid for sid, state in states.items() if not state.state_establishment_level],
         "states_missing_interpretation_caveat": [sid for sid, state in states.items() if not state.interpretation_caveat],
+        "states_missing_portal_user_summary": [sid for sid, state in states.items() if not state.portal_user_summary],
+        "states_missing_gene_expression_interpretation": [sid for sid, state in states.items() if not state.gene_expression_interpretation],
+        "states_missing_gene_expression_caveat": [sid for sid, state in states.items() if not state.gene_expression_caveat],
+        "states_missing_gene_expression_followup": [sid for sid, state in states.items() if not state.gene_expression_followup],
+        "states_missing_gene_expression_overinterpretation_warning": [sid for sid, state in states.items() if not state.gene_expression_overinterpretation_warning],
+        "states_missing_portal_display_establishment": [sid for sid, state in states.items() if not state.portal_display_establishment],
+        "states_missing_portal_primary_badges": [sid for sid, state in states.items() if not state.portal_primary_badges],
+        "states_missing_portal_methods_details": [sid for sid, state in states.items() if not state.portal_methods_details],
         "n_states_with_portal_metadata_rules": sum(any(w.startswith("portal_metadata_rule:") for w in state.provenance_warnings) for state in states.values()),
         "n_states_with_ambiguous_language_override": sum("ambiguous_language_override_applied" in state.provenance_warnings for state in states.values()),
         "marker_changes_from_metadata_rules": 0,

@@ -146,7 +146,18 @@ files update descriptions and interpretation metadata only. They must not change
 `state_id` values, marker genes, GMT membership, citations, or scoring outputs.
 
 Workbook-supplied metadata wins when present. Rule defaults fill missing fields
-and replace only inferred values. The v2 manifest and details JSON include:
+and replace only inferred values. The canonical manifest and details JSON include gene-centric fields for portal state cards:
+
+- `portal_user_summary`
+- `gene_expression_interpretation`
+- `gene_expression_caveat`
+- `gene_expression_followup`
+- `gene_expression_overinterpretation_warning`
+- `portal_display_establishment`
+- `portal_primary_badges`
+- `portal_methods_details`
+
+The older technical interpretation fields are still retained for methods/details displays:
 
 - `biological_description`
 - `state_establishment_level`

@@ -48,6 +48,14 @@ def test_curated_cell_state_api_json_build(tmpdir: Path) -> None:
     assert detail["summary"]["biological_description"]
     assert detail["summary"]["state_establishment_level"]
     assert detail["summary"]["interpretation_caveat"]
+    assert detail["summary"]["portal_user_summary"]
+    assert detail["summary"]["gene_expression_interpretation"]
+    assert detail["summary"]["gene_expression_caveat"]
+    assert detail["summary"]["gene_expression_followup"]
+    assert detail["summary"]["gene_expression_overinterpretation_warning"]
+    assert detail["summary"]["portal_display_establishment"]
+    assert detail["summary"]["portal_primary_badges"]
+    assert detail["summary"]["portal_methods_details"]
     assert detail["state"]["allow_hard_call"] is False
 
     manifest = pd.read_csv(out_dir / "curated_cell_state_manifest.tsv", sep="\t")
@@ -59,6 +67,14 @@ def test_curated_cell_state_api_json_build(tmpdir: Path) -> None:
         "interpretation_caveat",
         "quality_badges",
         "portal_visibility",
+        "portal_user_summary",
+        "gene_expression_interpretation",
+        "gene_expression_caveat",
+        "gene_expression_followup",
+        "gene_expression_overinterpretation_warning",
+        "portal_display_establishment",
+        "portal_primary_badges",
+        "portal_methods_details",
     }
     assert enhanced_cols.issubset(manifest.columns)
     assert enhanced_cols.issubset(manifest_v2.columns)
@@ -70,6 +86,8 @@ def test_curated_cell_state_api_json_build(tmpdir: Path) -> None:
     assert dediff["state"]["class"] == "composite_required"
     assert dediff["state"]["allow_hard_call"] is False
     assert dediff["summary"]["required_supporting_evidence"]
+    assert "identity loss" in dediff["summary"]["gene_expression_interpretation"].lower()
+    assert "composite" in dediff["summary"]["gene_expression_caveat"].lower()
 
     upr = details["pancreas_beta_cell_er_stress_upr"]
     assert upr["state"]["class"] == "process_gradient"
@@ -80,6 +98,14 @@ def test_curated_cell_state_api_json_build(tmpdir: Path) -> None:
     assert not report["states_missing_biological_description"]
     assert not report["states_missing_establishment_level"]
     assert not report["states_missing_interpretation_caveat"]
+    assert not report["states_missing_portal_user_summary"]
+    assert not report["states_missing_gene_expression_interpretation"]
+    assert not report["states_missing_gene_expression_caveat"]
+    assert not report["states_missing_gene_expression_followup"]
+    assert not report["states_missing_gene_expression_overinterpretation_warning"]
+    assert not report["states_missing_portal_display_establishment"]
+    assert not report["states_missing_portal_primary_badges"]
+    assert not report["states_missing_portal_methods_details"]
 
     pancreas = next(tissue for tissue in index["tissues"] if tissue["tissue_id"] == "pancreas")
     beta = next(cell_type for cell_type in pancreas["cell_types"] if cell_type["cell_type_id"] == "beta_cell")

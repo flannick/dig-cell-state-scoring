@@ -1,287 +1,408 @@
-schema_version: "1.0"
-purpose: "Rule-based portal metadata defaults for all curated cell states. These rules update descriptions and interpretation metadata only; they must not change marker genes."
-
+schema_version: '1.0'
+purpose: Rule-based portal metadata defaults for all curated cell states. These rules update descriptions and interpretation metadata only; they must not change marker genes.
 default_values:
-  score_scope: "within_tissue_cell_type"
-  manual_review_status: "reviewed"
-  portal_visibility: "show_default"
-  qc_sensitivity: "none"
-  hard_call_notes: "Use continuous activity scores by default. Hard calls require separate score-distribution validation."
-
+  score_scope: within_tissue_cell_type
+  manual_review_status: reviewed
+  portal_visibility: show_default
+  qc_sensitivity: none
+  hard_call_notes: Use continuous activity scores by default. Hard calls require separate score-distribution validation.
 state_archetypes:
   canonical_identity:
     match_any:
-      - "identity"
-      - "canonical"
-      - "resident"
-      - "quiescent"
-      - "arterial"
-      - "venous"
-      - "capillary"
-      - "periportal"
-      - "pericentral"
-    state_class: "broad_identity_gradient"
-    state_establishment_level: "canonical_identity"
-    interpretation_status: "continuous_gradient"
-    release_class: "portal_default"
+    - identity
+    - canonical
+    - resident
+    - quiescent
+    - arterial
+    - venous
+    - capillary
+    - periportal
+    - pericentral
+    state_class: broad_identity_gradient
+    state_establishment_level: canonical_identity
+    interpretation_status: continuous_gradient
+    release_class: portal_default
     allow_hard_call: false
     quality_badges:
-      - "Established identity marker panel"
-      - "Continuous activity score"
-    biological_description_template: "{state_label} represents a curated identity or subtype marker program within {cell_type_label}."
-    interpretation_caveat: "Use as an identity or subtype activity gradient within the selected parent cell type, not as a mutually exclusive cell-state probability."
-
+    - Established identity marker panel
+    - Continuous activity score
+    biological_description_template: '{state_label} represents a curated identity or subtype marker program within {cell_type_label}.'
+    interpretation_caveat: Use as an identity or subtype activity gradient within the selected parent cell type, not as a mutually exclusive cell-state probability.
+    portal_user_summary_template: '{state_label} is a curated identity marker program for {cell_type_label}.'
+    gene_expression_interpretation_template: If your gene is enriched here, it may be associated with the core identity, subtype identity, or differentiated function of {cell_type_label}.
+    gene_expression_caveat: Expression in an identity state usually indicates association with cells that strongly express identity markers; it does not prove the gene defines the identity state.
+    gene_expression_followup: Compare expression across related cell types and check whether the gene is broadly expressed or specific to this identity program.
+    gene_expression_overinterpretation_warning: Do not interpret enrichment alone as evidence that the gene is a master regulator of cell identity.
+    portal_display_establishment: Canonical identity marker panel
+    portal_primary_badges:
+    - Established identity
+    - Continuous gradient
   function_or_metabolism:
     match_any:
-      - "function"
-      - "secretory"
-      - "contractile"
-      - "metabolism"
-      - "metabolic"
-      - "lipid storage"
-      - "oxidative metabolism"
-      - "glycolytic"
-      - "electrophysiology"
-      - "endocrine"
-    state_class: "broad_function_gradient"
-    state_establishment_level: "established_functional_state"
-    interpretation_status: "continuous_gradient"
-    release_class: "portal_default"
+    - function
+    - secretory
+    - contractile
+    - metabolism
+    - metabolic
+    - lipid storage
+    - oxidative metabolism
+    - glycolytic
+    - electrophysiology
+    - endocrine
+    state_class: broad_function_gradient
+    state_establishment_level: established_functional_state
+    interpretation_status: continuous_gradient
+    release_class: portal_default
     allow_hard_call: false
     quality_badges:
-      - "Functional program"
-      - "Continuous activity score"
-    biological_description_template: "{state_label} captures a functional activity program in {cell_type_label}."
-    interpretation_caveat: "This is usually a functional gradient rather than a discrete state-positive population."
-
+    - Functional program
+    - Continuous activity score
+    biological_description_template: '{state_label} captures a functional activity program in {cell_type_label}.'
+    interpretation_caveat: This is usually a functional gradient rather than a discrete state-positive population.
+    portal_user_summary_template: '{state_label} captures a functional activity program in {cell_type_label}.'
+    gene_expression_interpretation_template: If your gene is enriched here, it may be associated with this functional activity in {cell_type_label}.
+    gene_expression_caveat: Functional states are often gradients, so enrichment should be interpreted as association with higher activity rather than membership in a discrete state.
+    gene_expression_followup: Check whether the gene is also enriched in related functional programs or whole-cell-type expression.
+    gene_expression_overinterpretation_warning: Do not interpret this as a mutually exclusive cell subtype.
+    portal_display_establishment: Established functional program
+    portal_primary_badges:
+    - Functional program
+    - Continuous gradient
   upr_er_stress:
     match_any:
-      - "er_stress"
-      - "upr"
-      - "unfolded protein"
-    state_class: "process_gradient"
-    state_establishment_level: "well_established_process"
-    interpretation_status: "continuous_gradient"
-    release_class: "portal_default"
+    - er_stress
+    - upr
+    - unfolded protein
+    state_class: process_gradient
+    state_establishment_level: well_established_process
+    interpretation_status: continuous_gradient
+    release_class: portal_default
     allow_hard_call: false
-    qc_sensitivity: "moderate"
+    qc_sensitivity: moderate
     quality_badges:
-      - "Well-established stress process"
-      - "Disease and handling sensitive"
-    biological_description: "UPR / ER stress reflects activation of the unfolded protein response and ER proteostasis machinery in the parent cell type."
-    interpretation_caveat: "This can represent real disease or physiological stress, but it can also be influenced by sample handling. Interpret with donor, batch, and QC context."
-
+    - Well-established stress process
+    - Disease and handling sensitive
+    biological_description: UPR / ER stress reflects activation of the unfolded protein response and ER proteostasis machinery in the parent cell type.
+    interpretation_caveat: This can represent real disease or physiological stress, but it can also be influenced by sample handling. Interpret with donor, batch, and QC context.
+    portal_user_summary: UPR / ER stress reflects unfolded-protein-response and ER proteostasis activity in the parent cell type.
+    gene_expression_interpretation: If your gene is enriched here, it may be linked to ER stress, protein-folding demand, secretory stress, or disease-associated cellular stress.
+    gene_expression_caveat: Expression in this state does not prove that the gene causes ER stress. UPR activity can reflect disease biology, physiological secretory load, or sample handling.
+    gene_expression_followup: Check whether the gene is also enriched in oxidative stress, inflammatory, or QC-sensitive programs, and whether disease or trait associations support an ER-stress interpretation.
+    gene_expression_overinterpretation_warning: Do not interpret state enrichment alone as evidence that the gene is an ER-stress driver.
+    portal_display_establishment: Well-established stress-response process
+    portal_primary_badges:
+    - Well-established process
+    - Stress response
+    - Continuous gradient
   interferon_mhc:
     match_any:
-      - "interferon"
-      - "mhc"
-      - "antigen presenting"
-      - "antigen_presenting"
-    state_class: "process_gradient"
-    state_establishment_level: "well_established_process"
-    interpretation_status: "continuous_gradient"
-    release_class: "portal_default"
+    - interferon
+    - mhc
+    - antigen presenting
+    - antigen_presenting
+    state_class: process_gradient
+    state_establishment_level: well_established_process
+    interpretation_status: continuous_gradient
+    release_class: portal_default
     allow_hard_call: false
-    qc_sensitivity: "moderate"
+    qc_sensitivity: moderate
     quality_badges:
-      - "Well-established inflammatory process"
-      - "Check immune contamination"
-    biological_description: "Interferon / MHC response captures inflammatory, antiviral, and antigen-presentation activity within the parent cell type."
-    interpretation_caveat: "This can be a real inflammatory state, but HLA-high ambient RNA, immune-cell contamination, and doublets should be checked."
-
+    - Well-established inflammatory process
+    - Check immune contamination
+    biological_description: Interferon / MHC response captures inflammatory, antiviral, and antigen-presentation activity within the parent cell type.
+    interpretation_caveat: This can be a real inflammatory state, but HLA-high ambient RNA, immune-cell contamination, and doublets should be checked.
+    portal_user_summary: Interferon / MHC response reflects inflammatory, antiviral, and antigen-presentation activity in the parent cell type.
+    gene_expression_interpretation: If your gene is enriched here, it may be linked to inflammatory signaling, cytokine response, antigen presentation, or immune-mediated stress in this cell type.
+    gene_expression_caveat: Expression in this state does not by itself prove the gene is immune-specific or causal for inflammation. Some IFN/MHC signals can track sample inflammation, immune-cell proximity, or HLA-rich ambient RNA.
+    gene_expression_followup: Check expression in immune cells, QC-sensitive states, IFN/MHC-matched programs, and PIGEAN trait anchors for autoimmune or inflammatory traits.
+    gene_expression_overinterpretation_warning: Do not interpret enrichment alone as evidence that the parent cell has become an immune cell or that the gene directly causes immune activation.
+    portal_display_establishment: Well-established inflammatory process
+    portal_primary_badges:
+    - Well-established process
+    - Inflammatory response
+    - Continuous gradient
   inflammatory_activation:
     match_any:
-      - "inflammatory"
-      - "chemokine"
-      - "nfkb"
-      - "activated inflammatory"
-    state_class: "process_gradient"
-    state_establishment_level: "well_established_process"
-    interpretation_status: "continuous_gradient"
-    release_class: "portal_flagged"
+    - inflammatory
+    - chemokine
+    - nfkb
+    - activated inflammatory
+    state_class: process_gradient
+    state_establishment_level: well_established_process
+    interpretation_status: continuous_gradient
+    release_class: portal_flagged
     allow_hard_call: false
-    qc_sensitivity: "moderate"
+    qc_sensitivity: moderate
     quality_badges:
-      - "Inflammatory process"
-      - "Context dependent"
-    biological_description_template: "{state_label} represents inflammatory activation in {cell_type_label}."
-    interpretation_caveat: "Interpret as a process score; consider disease, dissociation, immune contamination, and batch context."
-
+    - Inflammatory process
+    - Context dependent
+    biological_description_template: '{state_label} represents inflammatory activation in {cell_type_label}.'
+    interpretation_caveat: Interpret as a process score; consider disease, dissociation, immune contamination, and batch context.
+    portal_user_summary_template: '{state_label} reflects inflammatory activation in {cell_type_label}.'
+    gene_expression_interpretation_template: If your gene is enriched here, it may be associated with inflammatory signaling, cytokine/chemokine response, or disease-associated activation in {cell_type_label}.
+    gene_expression_caveat: Inflammatory expression can reflect biology, tissue processing, local immune infiltration, or disease context.
+    gene_expression_followup: Check whether the gene is enriched in IFN/MHC states, immune cell types, and inflammatory trait anchors.
+    gene_expression_overinterpretation_warning: Do not interpret expression in this state as proof that the gene initiates inflammation.
+    portal_display_establishment: Inflammatory process
+    portal_primary_badges:
+    - Inflammatory process
+    - Context dependent
   oxidative_mitochondrial_stress:
     match_any:
-      - "oxidative"
-      - "mitochondrial stress"
-      - "hmox1"
-    state_class: "process_gradient"
-    state_establishment_level: "generic_process_marker_panel"
-    interpretation_status: "continuous_gradient"
-    release_class: "portal_flagged"
+    - oxidative
+    - mitochondrial stress
+    - hmox1
+    state_class: process_gradient
+    state_establishment_level: generic_process_marker_panel
+    interpretation_status: continuous_gradient
+    release_class: portal_flagged
     allow_hard_call: false
-    qc_sensitivity: "high"
+    qc_sensitivity: high
     quality_badges:
-      - "Stress process"
-      - "QC sensitive"
-    biological_description: "Oxidative / mitochondrial stress captures antioxidant response, mitochondrial proteostasis, and cellular stress-response activity."
-    interpretation_caveat: "Use as a stress activity score, not a discrete state label. Distinguish biological oxidative stress from high mitochondrial-read QC artifacts."
-
+    - Stress process
+    - QC sensitive
+    biological_description: Oxidative / mitochondrial stress captures antioxidant response, mitochondrial proteostasis, and cellular stress-response activity.
+    interpretation_caveat: Use as a stress activity score, not a discrete state label. Distinguish biological oxidative stress from high mitochondrial-read QC artifacts.
+    portal_user_summary: Oxidative / mitochondrial stress reflects antioxidant response, mitochondrial proteostasis, and cellular stress activity.
+    gene_expression_interpretation: If your gene is enriched here, it may be associated with oxidative stress, mitochondrial stress response, or stress-adaptive metabolism.
+    gene_expression_caveat: This signal can reflect real biology or technical cell-quality effects. Interpret gene enrichment alongside mitochondrial-read fraction, cell quality, and QC-state matches.
+    gene_expression_followup: Check whether the gene is also enriched in UPR, apoptosis/cell-death, or mitochondrial QC programs.
+    gene_expression_overinterpretation_warning: Do not treat enrichment alone as proof of mitochondrial dysfunction or bad-cell artifact.
+    portal_display_establishment: Generic stress-response marker panel
+    portal_primary_badges:
+    - Stress process
+    - QC-sensitive
   proliferation:
     match_any:
-      - "proliferative"
-      - "proliferating"
-      - "cell_cycle"
-      - "cycling"
-    state_class: "rare_process"
-    state_establishment_level: "well_established_process"
-    interpretation_status: "continuous_or_hard_callable_if_separable"
-    release_class: "portal_default"
+    - proliferative
+    - proliferating
+    - cell_cycle
+    - cycling
+    state_class: rare_process
+    state_establishment_level: well_established_process
+    interpretation_status: continuous_or_hard_callable_if_separable
+    release_class: portal_default
     allow_hard_call: true
-    qc_sensitivity: "low"
+    qc_sensitivity: low
     quality_badges:
-      - "Well-established cell-cycle process"
-      - "Potentially hard-callable if separable"
-    biological_description: "Proliferation / cell cycle captures cycling cells using canonical S/G2M and mitotic markers."
-    interpretation_caveat: "The marker panel is generic across cell types; hard calls should be accepted only if the score distribution supports a separable cycling population."
-
+    - Well-established cell-cycle process
+    - Potentially hard-callable if separable
+    biological_description: Proliferation / cell cycle captures cycling cells using canonical S/G2M and mitotic markers.
+    interpretation_caveat: The marker panel is generic across cell types; hard calls should be accepted only if the score distribution supports a separable cycling population.
+    portal_user_summary: Proliferation / cell cycle captures cycling cells using canonical S/G2M and mitotic markers.
+    gene_expression_interpretation: If your gene is enriched here, it may be associated with cell-cycle activity, proliferative expansion, or cycling subpopulations of the selected cell type.
+    gene_expression_caveat: Cell-cycle signatures are generic across many cell types. Enrichment does not imply cell-type-specific proliferation biology unless supported by cell-type context.
+    gene_expression_followup: Check whether the gene is a known cell-cycle gene and whether the association persists outside broadly cycling programs.
+    gene_expression_overinterpretation_warning: Do not interpret enrichment alone as a disease-specific proliferation mechanism.
+    portal_display_establishment: Well-established cell-cycle process
+    portal_primary_badges:
+    - Cell-cycle process
+    - Potentially hard-callable if separable
   dedifferentiation_low_identity:
     match_any:
-      - "dedifferentiation"
-      - "dedifferentiated"
-      - "low_identity"
-    state_class: "composite_required"
-    state_establishment_level: "disease_associated_established"
-    interpretation_status: "composite_required"
-    release_class: "portal_flagged"
+    - dedifferentiation
+    - dedifferentiated
+    - low_identity
+    state_class: composite_required
+    state_establishment_level: disease_associated_established
+    interpretation_status: composite_required
+    release_class: portal_flagged
     allow_hard_call: false
-    qc_sensitivity: "high"
+    qc_sensitivity: high
     is_composite_required: true
     quality_badges:
-      - "Disease-associated concept"
-      - "Composite interpretation required"
-    biological_description: "Dedifferentiation / low identity represents loss of mature cell identity with acquisition of plasticity, progenitor-like, alternate-lineage, or stress-associated features reported in disease or injury contexts."
-    interpretation_caveat: "Do not call this from positive marker activity alone. Interpretation should require loss of mature identity and checks for off-target identity, ambient RNA, and doublets."
-    required_supporting_evidence: "high dedifferentiation/plasticity marker activity; low mature identity activity; retained parent-cell assignment; low off-target and ambient QC scores"
-    do_not_overinterpret_as: "a mutually exclusive subtype or definitive lineage transition in a single cell"
-
+    - Disease-associated concept
+    - Composite interpretation required
+    biological_description: Dedifferentiation / low identity represents loss of mature cell identity with acquisition of plasticity, progenitor-like, alternate-lineage, or stress-associated features reported in disease or injury contexts.
+    interpretation_caveat: Do not call this from positive marker activity alone. Interpretation should require loss of mature identity and checks for off-target identity, ambient RNA, and doublets.
+    required_supporting_evidence: high dedifferentiation/plasticity marker activity; low mature identity activity; retained parent-cell assignment; low off-target and ambient QC scores
+    do_not_overinterpret_as: a mutually exclusive subtype or definitive lineage transition in a single cell
+    portal_user_summary: Dedifferentiation / low identity reflects loss of mature parent-cell features with acquisition of plasticity, progenitor-like, alternate-lineage, or stress-associated expression features.
+    gene_expression_interpretation: If your gene is enriched here, it may be associated with identity loss, stress-related plasticity, or disease-associated remodeling of the parent cell phenotype.
+    gene_expression_caveat: This is a composite interpretation. A gene enriched in this marker panel should not automatically be described as a dedifferentiation driver. Some markers overlap progenitor, alternate-lineage, stress, or contamination signals.
+    gene_expression_followup: Check mature identity states, disallowed-gene states, off-target cell-type expression, QC-state matches, and disease-associated programs.
+    gene_expression_overinterpretation_warning: Do not conclude from expression alone that the gene causes lineage transition or that cells are definitively dedifferentiated.
+    portal_display_establishment: Disease-associated concept; composite interpretation required
+    portal_primary_badges:
+    - Disease-associated concept
+    - Composite interpretation required
+    - Interpret with identity-loss context
   disallowed_gene_reexpression:
     match_any:
-      - "disallowed"
-      - "derepression"
-      - "reexpression"
-    state_class: "composite_required"
-    state_establishment_level: "disease_associated_established"
-    interpretation_status: "composite_required"
-    release_class: "portal_flagged"
+    - disallowed
+    - derepression
+    - reexpression
+    state_class: composite_required
+    state_establishment_level: disease_associated_established
+    interpretation_status: composite_required
+    release_class: portal_flagged
     allow_hard_call: false
-    qc_sensitivity: "high"
+    qc_sensitivity: high
     is_composite_required: true
     quality_badges:
-      - "Disease-relevant marker concept"
-      - "Composite interpretation required"
-    biological_description: "Disallowed-gene reexpression captures loss of normal cell-type-specific repression of genes that are usually kept low in the mature parent cell type."
-    interpretation_caveat: "Marker activity can reflect true loss of repression, dedifferentiation, or contamination. Interpret together with parent identity retention and off-target QC scores."
-    required_supporting_evidence: "high disallowed-gene marker activity; parent identity retained; low ambient and off-target identity QC; not explained by doublets"
-
+    - Disease-relevant marker concept
+    - Composite interpretation required
+    biological_description: Disallowed-gene reexpression captures loss of normal cell-type-specific repression of genes that are usually kept low in the mature parent cell type.
+    interpretation_caveat: Marker activity can reflect true loss of repression, dedifferentiation, or contamination. Interpret together with parent identity retention and off-target QC scores.
+    required_supporting_evidence: high disallowed-gene marker activity; parent identity retained; low ambient and off-target identity QC; not explained by doublets
+    portal_user_summary: Disallowed-gene reexpression captures loss of normal cell-type-specific repression of genes that are usually kept low in mature cells.
+    gene_expression_interpretation: If your gene is enriched here, it may be associated with loss of mature repression programs, disease-associated identity stress, or dedifferentiation-like biology.
+    gene_expression_caveat: Expression in this marker panel can reflect true derepression, but also contamination, alternate-lineage signal, or low parent-cell purity.
+    gene_expression_followup: Check mature identity, dedifferentiation-like states, off-target expression, and QC signatures before interpreting the gene as a disallowed-gene mechanism.
+    gene_expression_overinterpretation_warning: Do not interpret enrichment alone as proof of dedifferentiation or causal loss of repression.
+    portal_display_establishment: Disease-relevant marker concept; composite interpretation required
+    portal_primary_badges:
+    - Disease-relevant marker concept
+    - Composite interpretation required
   senescence_like:
     match_any:
-      - "senescence"
-      - "senescence_like"
-    state_class: "composite_required"
-    state_establishment_level: "emerging_context_dependent"
-    interpretation_status: "composite_required"
-    release_class: "portal_flagged"
+    - senescence
+    - senescence_like
+    state_class: composite_required
+    state_establishment_level: emerging_context_dependent
+    interpretation_status: composite_required
+    release_class: portal_flagged
     allow_hard_call: false
-    qc_sensitivity: "high"
+    qc_sensitivity: high
     is_composite_required: true
     quality_badges:
-      - "Senescence-like process"
-      - "Composite interpretation required"
-    biological_description: "Senescence-like signatures capture cell-cycle arrest, stress-response, SASP-like, and survival-marker features that may occur with aging, injury, or disease."
-    interpretation_caveat: "No single marker panel definitively identifies senescence in single-cell RNA-seq. Interpret only with supporting evidence and QC checks for dying or stressed cells."
-    required_supporting_evidence: "senescence-like marker activity; low cycling activity; viable-cell QC; disease/age context; absence of dominant cell-death or mitochondrial artifact"
-
+    - Senescence-like process
+    - Composite interpretation required
+    biological_description: Senescence-like signatures capture cell-cycle arrest, stress-response, SASP-like, and survival-marker features that may occur with aging, injury, or disease.
+    interpretation_caveat: No single marker panel definitively identifies senescence in single-cell RNA-seq. Interpret only with supporting evidence and QC checks for dying or stressed cells.
+    required_supporting_evidence: senescence-like marker activity; low cycling activity; viable-cell QC; disease/age context; absence of dominant cell-death or mitochondrial artifact
+    portal_user_summary: Senescence-like signatures capture cell-cycle arrest, stress-response, SASP-like, and survival-marker features that may occur with aging, injury, or disease.
+    gene_expression_interpretation: If your gene is enriched here, it may be associated with senescence-like stress, aging-related remodeling, or inflammatory survival programs.
+    gene_expression_caveat: Single-cell RNA-seq marker panels do not definitively identify senescence. Expression may reflect stress, injury, inflammation, or cell-death-adjacent programs.
+    gene_expression_followup: Check cell-cycle status, viability/QC programs, inflammatory states, disease or age associations, and whether the gene is part of the marker panel.
+    gene_expression_overinterpretation_warning: Do not interpret enrichment alone as proof that the gene marks or causes cellular senescence.
+    portal_display_establishment: Senescence-like process; composite interpretation required
+    portal_primary_badges:
+    - Senescence-like process
+    - Composite interpretation required
+    - QC-sensitive
   heat_shock_or_dissociation:
     match_any:
-      - "heat_shock"
-      - "dissociation"
-      - "immediate_early"
-    state_class: "process_gradient"
-    state_establishment_level: "generic_process_marker_panel"
-    interpretation_status: "continuous_gradient"
-    release_class: "portal_flagged"
+    - heat_shock
+    - dissociation
+    - immediate_early
+    state_class: process_gradient
+    state_establishment_level: generic_process_marker_panel
+    interpretation_status: continuous_gradient
+    release_class: portal_flagged
     allow_hard_call: false
-    qc_sensitivity: "high"
+    qc_sensitivity: high
     quality_badges:
-      - "Processing-sensitive process"
-      - "QC sensitive"
-    biological_description: "Heat-shock or immediate-early signatures capture acute stress-response activity that may reflect biology, tissue processing, or dissociation."
-    interpretation_caveat: "Use primarily as a review flag or sensitivity covariate unless supported by disease or experimental context."
-
+    - Processing-sensitive process
+    - QC sensitive
+    biological_description: Heat-shock or immediate-early signatures capture acute stress-response activity that may reflect biology, tissue processing, or dissociation.
+    interpretation_caveat: Use primarily as a review flag or sensitivity covariate unless supported by disease or experimental context.
+    portal_user_summary_template: '{state_label} captures acute stress-response activity in {cell_type_label}.'
+    gene_expression_interpretation: If your gene is enriched here, it may be associated with heat-shock, immediate-early, dissociation-sensitive, or acute stress-response biology.
+    gene_expression_caveat: This signal can reflect real biology or tissue processing. Interpret gene enrichment alongside QC signatures, batch, and dissociation context.
+    gene_expression_followup: Check QC-sensitive programs, UPR/stress states, and whether the association persists in independent maps or disease contexts.
+    gene_expression_overinterpretation_warning: Do not interpret enrichment alone as proof that the gene drives a biological stress state rather than processing sensitivity.
+    portal_display_establishment: Processing-sensitive stress-response marker panel
+    portal_primary_badges:
+    - Processing-sensitive process
+    - QC-sensitive
   remodeling_fibrosis_emt:
     match_any:
-      - "remodeling"
-      - "fibrotic"
-      - "fibrosis"
-      - "myofibroblast"
-      - "endmt"
-      - "emt"
-      - "matrix"
-      - "synthetic"
-    state_class: "process_gradient"
-    state_establishment_level: "emerging_context_dependent"
-    interpretation_status: "continuous_gradient"
-    release_class: "portal_flagged"
+    - remodeling
+    - fibrotic
+    - fibrosis
+    - myofibroblast
+    - endmt
+    - emt
+    - matrix
+    - synthetic
+    state_class: process_gradient
+    state_establishment_level: emerging_context_dependent
+    interpretation_status: continuous_gradient
+    release_class: portal_flagged
     allow_hard_call: false
-    qc_sensitivity: "moderate"
+    qc_sensitivity: moderate
     quality_badges:
-      - "Remodeling process"
-      - "Context dependent"
-    biological_description_template: "{state_label} captures remodeling, extracellular matrix, or transition-like activity in {cell_type_label}."
-    interpretation_caveat: "These programs often overlap related stromal or mural lineages. Interpret with parent-cell identity and contamination checks."
-
+    - Remodeling process
+    - Context dependent
+    biological_description_template: '{state_label} captures remodeling, extracellular matrix, or transition-like activity in {cell_type_label}.'
+    interpretation_caveat: These programs often overlap related stromal or mural lineages. Interpret with parent-cell identity and contamination checks.
+    portal_user_summary_template: '{state_label} captures remodeling, extracellular matrix, transition-like, or repair-associated activity in {cell_type_label}.'
+    gene_expression_interpretation: If your gene is enriched here, it may be associated with tissue remodeling, extracellular matrix production, phenotypic transition, repair, or disease-associated structural change.
+    gene_expression_caveat: These states can overlap neighboring stromal, mural, epithelial, or inflammatory cell programs. Interpret gene enrichment with parent-cell identity and cell-type specificity.
+    gene_expression_followup: Check expression in related stromal/mural/epithelial cell types, matched programs, and fibrosis or remodeling trait anchors.
+    gene_expression_overinterpretation_warning: Do not infer lineage transition or fibrosis causality from state enrichment alone.
+    portal_display_establishment: Remodeling process; context dependent
+    portal_primary_badges: &id001
+    - Remodeling process
+    - Context dependent
   angiogenic:
     match_any:
-      - "angiogenic"
-      - "proangiogenic"
-      - "neovascular"
-    state_class: "process_gradient"
-    state_establishment_level: "emerging_context_dependent"
-    interpretation_status: "continuous_gradient"
-    release_class: "portal_default"
+    - angiogenic
+    - proangiogenic
+    - neovascular
+    state_class: process_gradient
+    state_establishment_level: emerging_context_dependent
+    interpretation_status: continuous_gradient
+    release_class: portal_default
     allow_hard_call: false
-    qc_sensitivity: "low"
+    qc_sensitivity: low
     quality_badges:
-      - "Angiogenic process"
-      - "Context dependent"
-    biological_description_template: "{state_label} captures angiogenic or vascular remodeling activity."
-    interpretation_caveat: "Interpret as a process score and consider disease, ischemia, vascular compartment, and tissue context."
-
+    - Angiogenic process
+    - Context dependent
+    biological_description_template: '{state_label} captures angiogenic or vascular remodeling activity.'
+    interpretation_caveat: Interpret as a process score and consider disease, ischemia, vascular compartment, and tissue context.
+    portal_user_summary_template: '{state_label} captures remodeling, extracellular matrix, transition-like, or repair-associated activity in {cell_type_label}.'
+    gene_expression_interpretation: If your gene is enriched here, it may be associated with tissue remodeling, extracellular matrix production, phenotypic transition, repair, or disease-associated structural change.
+    gene_expression_caveat: These states can overlap neighboring stromal, mural, epithelial, or inflammatory cell programs. Interpret gene enrichment with parent-cell identity and cell-type specificity.
+    gene_expression_followup: Check expression in related stromal/mural/epithelial cell types, matched programs, and fibrosis or remodeling trait anchors.
+    gene_expression_overinterpretation_warning: Do not infer lineage transition or fibrosis causality from state enrichment alone.
+    portal_display_establishment: Remodeling process; context dependent
+    portal_primary_badges: *id001
   lipid_foam_lam:
     match_any:
-      - "foam"
-      - "lipid_associated"
-      - "lipid associated"
-      - "trem2"
-      - "phagocytic"
-    state_class: "process_gradient"
-    state_establishment_level: "disease_associated_established"
-    interpretation_status: "continuous_gradient"
-    release_class: "portal_default"
+    - foam
+    - lipid_associated
+    - lipid associated
+    - trem2
+    - phagocytic
+    state_class: process_gradient
+    state_establishment_level: disease_associated_established
+    interpretation_status: continuous_gradient
+    release_class: portal_default
     allow_hard_call: false
-    qc_sensitivity: "moderate"
+    qc_sensitivity: moderate
     quality_badges:
-      - "Disease-associated macrophage/stress program"
-      - "Context dependent"
-    biological_description_template: "{state_label} captures lipid-handling or phagocytic activity often associated with tissue remodeling or disease."
-    interpretation_caveat: "Interpret with tissue context and parent-cell identity; related genes can also reflect ambient lipid-rich tissue signal."
-
+    - Disease-associated macrophage/stress program
+    - Context dependent
+    biological_description_template: '{state_label} captures lipid-handling or phagocytic activity often associated with tissue remodeling or disease.'
+    interpretation_caveat: Interpret with tissue context and parent-cell identity; related genes can also reflect ambient lipid-rich tissue signal.
+    portal_user_summary_template: '{state_label} captures lipid-handling, foam-cell-like, or phagocytic activity in {cell_type_label}.'
+    gene_expression_interpretation: If your gene is enriched here, it may be associated with lipid handling, phagocytosis, tissue remodeling, or disease-associated macrophage/stress programs.
+    gene_expression_caveat: These programs can reflect tissue context, ambient lipid-rich signal, or related remodeling states as well as true parent-cell biology.
+    gene_expression_followup: Check tissue context, parent-cell identity, matched programs, and lipid/remodeling trait anchors.
+    gene_expression_overinterpretation_warning: Do not infer a causal lipid-handling or foam-cell mechanism from state enrichment alone.
+    portal_display_establishment: Disease-associated lipid-handling process
+    portal_primary_badges:
+    - Disease-associated process
+    - Context dependent
 fallback:
-  state_class: "unknown"
-  state_establishment_level: "needs_review"
-  interpretation_status: "needs_review"
-  release_class: "portal_flagged"
+  state_class: unknown
+  state_establishment_level: needs_review
+  interpretation_status: needs_review
+  release_class: portal_flagged
   allow_hard_call: false
-  portal_visibility: "show_with_caution"
-  biological_description_template: "{state_label} is a curated marker panel for {cell_type_label} in {tissue_label}. The biological interpretation needs review or more specific annotation."
-  interpretation_caveat: "Treat as a curated exploratory marker panel until the state class and establishment level are manually reviewed."
+  portal_visibility: show_with_caution
+  biological_description_template: '{state_label} is a curated marker panel for {cell_type_label} in {tissue_label}. The biological interpretation needs review or more specific annotation.'
+  interpretation_caveat: Treat as a curated exploratory marker panel until the state class and establishment level are manually reviewed.
   quality_badges:
-    - "Needs metadata review"
+  - Needs metadata review
+  portal_user_summary_template: '{state_label} is a curated marker panel for {cell_type_label} in {tissue_label}.'
+  gene_expression_interpretation: If your gene is enriched here, it may be associated with this curated marker context, but the biological interpretation needs more specific review.
+  gene_expression_caveat: This state currently lacks a finalized portal-facing biological interpretation.
+  gene_expression_followup: Review marker genes, references, expression in related states, and program matches before drawing conclusions.
+  gene_expression_overinterpretation_warning: Do not treat this as a definitive biological state until metadata review is complete.
+  portal_display_establishment: Needs metadata review
+  portal_primary_badges:
+  - Needs metadata review
+  - Exploratory marker panel
