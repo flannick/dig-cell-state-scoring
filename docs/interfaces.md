@@ -475,3 +475,15 @@ Columns:
 - `assignment_pass`
 
 `assignment_source` is `gmt_marker` for curated marker membership or `state_association_de` for data-driven state-positive associations.
+
+## Matrix Value Types
+
+Sparse rank and expression inputs can declare their value type explicitly. Supported values are `raw_counts`, `linear_cp10k`, `log1p_cp10k`, `linear_normalized`, `log1p_normalized`, and `auto`.
+
+Use `--rank-value-type` with `run_cmdkp_state_scoring.py`. Rank-based AUCell/UCell scoring accepts non-negative raw, normalized, or log-normalized values because scoring depends on within-cell gene ranks. Negative scaled values are rejected by default.
+
+Use `--expression-value-type` with `summarize_state_expression.py`. Raw counts are converted to CP10K using cell totals. Linear CP10K-like values are averaged directly. Log-normalized CP10K-like values are first transformed with `expm1(value)` and then averaged. Generic normalized values are handled the same way but are labeled as normalized expression rather than strict CP10K.
+
+When `auto` is used, the code first looks for `matrix_value_type.json` in the 10x-like directory and then falls back to distribution-based inference. Low-confidence inference fails and requires an explicit value type.
+
+For normalized inputs, direct QC metrics should come from metadata fields such as `QC:nCount_RNA`, `QC:nFeature_RNA`, and `QC:percent.mt`. QC signature scores can still be computed from the normalized rank matrix.

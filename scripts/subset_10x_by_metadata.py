@@ -86,6 +86,14 @@ def copy_text_gz(src: Path, dest: Path) -> None:
         shutil.copyfileobj(inp, out)
 
 
+def copy_matrix_metadata(input_dir: Path, output_dirs: list[Path]) -> None:
+    for name in ["matrix_value_type.json", "value_type_inference_report.json"]:
+        src = input_dir / name
+        if src.exists():
+            for out_dir in output_dirs:
+                shutil.copy2(src, out_dir / name)
+
+
 def subset_barcodes(src: Path, dest: Path, selected_positions: set[int]) -> dict[int, int]:
     old_to_new: dict[int, int] = {}
     new_index = 0
@@ -342,6 +350,7 @@ def write_batch_split(
     group_dirs = {key: group_output_dir(out_dir, key) for key in group_cells}
     out_dir.mkdir(parents=True, exist_ok=True)
     copy_features_to_groups(features_in, group_dirs)
+    copy_matrix_metadata(matrix_in.parent, list(group_dirs.values()))
     old_to_group_new, group_cell_counts, missing = write_batch_barcodes(barcodes_in, group_to_cells, group_dirs)
     if missing:
         raise SystemExit(f"Input 10x barcodes are missing {len(missing)} selected cells")
@@ -421,6 +430,7 @@ def main() -> None:
         raise SystemExit(f"Input 10x barcodes are missing {len(missing)} selected cells")
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
+    copy_matrix_metadata(args.input_10x_dir, [args.out_dir])
     features_out = args.out_dir / "features.tsv.gz"
     barcodes_out = args.out_dir / "barcodes.tsv.gz"
     matrix_out = args.out_dir / "matrix.mtx.gz"

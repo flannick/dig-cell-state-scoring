@@ -50,6 +50,42 @@ Then summarize all-gene CP10K expression:
   --out-dir results/cell_state_de/by_group/tissue_a/cell_type_a/expression
 ```
 
+For a multi-cell-type run from one full matrix, pass the all-state GMT and the
+state manifest without `--parent-cell-filter`. By default,
+`--score-relevant-states-only` streams the sparse rank universe once while
+scoring each biological state only in cells whose `tissue` and `cell_type` match
+the state scope. QC signatures are still scored in every cell. Use
+`--no-score-relevant-states-only` only for debugging old all-states-in-all-cells
+behavior.
+
+```bash
+../.venv/bin/python cell_state_de/scripts/run_cmdkp_state_scoring.py \
+  --rank-10x-dir results/cell_state_de/full_rank_10x \
+  --qc-raw-10x-dir results/cell_state_de/full_raw_10x \
+  --expression-matrix results/cell_state_de/query_gene_expression_long.tsv.gz \
+  --cell-metadata results/cell_state_de/metadata.tsv.gz \
+  --states-gmt cell_state_de/dat/pancreas/pancreas_cell_state_markers.gmt \
+  --qc-states-gmt cell_state_de/dat/qc/cmdkp_all_tissues_minimal_bad_cell_qc_signatures.gmt \
+  --state-manifest results/cell_state_de/state_manifest.tsv \
+  --require-state-manifest \
+  --out-dir results/cell_state_de/all_pancreas_relevance_aware/workflow
+```
+
+The sparse scoring loop writes progress to stderr by default every 10,000 cells, for example `[sparse-score] cells 50000/448935 (11.1%)`. Use `--progress-every-cells` to change the interval, or `--quiet-progress` to suppress these messages. The timing log records `n_relevant_cell_gene_set_pairs`, which should be much
+smaller than `n_cells x n_all_states` when multiple cell types share one GMT.
+Use the matching full raw matrix and combined activity file for one-pass
+state-expression summarization across all relevant tissue/cell-type/state groups:
+
+```bash
+../.venv/bin/python cell_state_de/scripts/summarize_state_expression.py \
+  --raw-10x-dir results/cell_state_de/full_raw_10x \
+  --metadata results/cell_state_de/metadata.tsv.gz \
+  --cell-state-activity results/cell_state_de/all_pancreas_relevance_aware/workflow/cell_state_activity.tsv.gz \
+  --states-gmt cell_state_de/dat/pancreas/pancreas_cell_state_markers.gmt \
+  --parent-group-cols tissue,cell_type \
+  --out-dir results/cell_state_de/all_pancreas_relevance_aware/expression
+```
+
 For many tissues/cell types, use one YAML config instead of hand-written shell loops:
 
 ```yaml
@@ -120,6 +156,7 @@ Use these outputs for downstream portal-scale analysis:
 - `cell_state_hard_assignments.tsv.gz`: optional hard calls where a supported threshold exists.
 - `qc_applied_exclusions.tsv.gz`, `qc_direct_metric_flags.tsv.gz`, `qc_signature_review_flags.tsv.gz`: separated QC outputs.
 - `all_gene_state_expression_specificity_cp10k.tsv.gz`: CP10K state expression and screening specificity metrics.
+- `all_gene_cell_type_expression_cp10k.tsv.gz`: absolute cell-type CP10K/log1p expression and cell-type-vs-context relative expression in the same units.
 - `donor_state_weighted_expression_cp10k.tsv.gz`: donor-level state-weighted CP10K summaries for regression.
 - state-derived GMTs under `state_expression_gmts/gmt/`.
 - PIGEAN and donor phenotype regression outputs when requested.
@@ -423,13 +460,14 @@ activity weights using sparse raw counts:
 The script computes CP10K from total raw counts per cell, then writes:
 
 - `all_gene_all_parent_cp10k.tsv.gz`
+- `all_gene_cell_type_expression_cp10k.tsv.gz`
 - `all_gene_state_expression_cp10k.tsv.gz`
 - `all_gene_state_specificity_cp10k.tsv.gz`
 - `all_gene_state_expression_specificity_cp10k.tsv.gz`
 - `donor_state_weighted_expression_cp10k.tsv.gz`
 - `state_expression_summary.json`
 
-The primary expression unit is CP10K plus `log1p(mean CP10K)`. The current
+The primary expression unit is CP10K plus `log1p(mean CP10K)`. The cell-type table reports absolute cell-type expression, `log2fc_cell_type_vs_all_context`, and `log2fc_cell_type_vs_other_context`. The all-context comparator is the same parent grouping with the cell-type column removed; the other-context comparator excludes the target cell type from that context. If the input contains only one cell type, the other-context columns are missing and the all-context fold-change is expected to be zero or uninformative, while the absolute CP10K columns remain valid. To generate only the cell-type table from a broad matrix, use `--cell-type-expression-only`; to keep one or more cell types, use `--cell-type-expression-cell-types`. The current
 specificity p-value is a scalable weighted-vs-parent normal-approximation
 screening statistic; it is intended for ranking and GMT construction, not as a
 donor-level inferential test. Rows from low-signal or composite-required states
@@ -578,3 +616,41 @@ Regression:
 ```text
 log1p(y_dgs) ~ phenotype_d + covariates_d
 ```
+
+## Normalized Matrix Fallback
+
+Some datasets arrive as dense normalized expression instead of raw counts. Convert these files once to a sparse 10x-like directory:
+
+```bash
+../.venv/bin/python cell_state_de/scripts/convert_expression_tsv_to_sparse_10x.py \
+  --matrix-tsv data/external/fnih/heart/norm_counts.tsv.gz \
+  --out-dir results/fnih_heart/norm_10x \
+  --value-type auto
+```
+
+Then score states from that sparse directory. For log-normalized CP10K-like values:
+
+```bash
+../.venv/bin/python cell_state_de/scripts/run_cmdkp_state_scoring.py \
+  --rank-10x-dir results/fnih_heart/norm_10x \
+  --rank-value-type log1p_cp10k \
+  --expression-kind log1p_normalized \
+  --expression-matrix results/fnih_heart/query_expression.tsv.gz \
+  --cell-metadata data/external/fnih/heart/sample_metadata.tsv.gz \
+  --states-gmt cell_state_de/dat/heart/heart_cell_state_markers.gmt \
+  --out-dir results/fnih_heart/state_scoring
+```
+
+For expression summaries, specify how values should be linearized:
+
+```bash
+../.venv/bin/python cell_state_de/scripts/summarize_state_expression.py \
+  --raw-10x-dir results/fnih_heart/norm_10x \
+  --expression-value-type log1p_cp10k \
+  --metadata data/external/fnih/heart/sample_metadata.tsv.gz \
+  --cell-state-activity results/fnih_heart/state_scoring/cell_state_activity.tsv.gz \
+  --states-gmt cell_state_de/dat/heart/heart_cell_state_markers.gmt \
+  --out-dir results/fnih_heart/state_expression
+```
+
+Do not convert normalized values back to raw counts. AUCell/UCell use ranks, so non-negative normalized or log-normalized values are acceptable for scoring. For expression summaries, `log1p_cp10k` is transformed with `expm1(value)` before weighted means are computed. Outputs keep the historical CP10K-named files for compatibility, but include `expression_unit` and generic `*_expression` columns when the input is CP10K-like or normalized rather than raw counts.

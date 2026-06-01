@@ -153,6 +153,10 @@ def run_group(group: pd.Series, context: dict[str, Any]) -> dict[str, list[dict[
     ]
     if config.get("qc_gmt"):
         scoring_cmd.extend(["--qc-states-gmt", str(config["qc_gmt"])])
+    if config.get("rank_value_type"):
+        scoring_cmd.extend(["--rank-value-type", str(config["rank_value_type"])])
+    if config.get("expression_kind"):
+        scoring_cmd.extend(["--expression-kind", str(config["expression_kind"])])
     if config.get("allow_small_rank_universe"):
         scoring_cmd.append("--allow-small-rank-universe")
     scoring_cmd.extend(config_list(config, "scoring_extra_args"))
@@ -172,6 +176,8 @@ def run_group(group: pd.Series, context: dict[str, Any]) -> dict[str, list[dict[
         "--out-dir",
         str(expr_dir),
     ]
+    if config.get("expression_value_type"):
+        expr_cmd.extend(["--expression-value-type", str(config["expression_value_type"])])
     if config.get("donor_expression_genes"):
         expr_cmd.extend(["--donor-expression-genes", str(config["donor_expression_genes"])])
     if "write_donor_state_expression" in config:
