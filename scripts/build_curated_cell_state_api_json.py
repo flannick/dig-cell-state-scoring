@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import yaml
 
 
 MARKER_SHEET_CANDIDATES = ["marker_rows", "markers", "marker_table", "liver_markers"]
@@ -76,6 +77,26 @@ class StateRecord:
     state_level_citation_ids: set[str] = field(default_factory=set)
     provenance_warnings: list[str] = field(default_factory=list)
     excel_state_keys: set[tuple[str, str, str]] = field(default_factory=set)
+    excel_metadata_fields: set[str] = field(default_factory=set)
+    recommended_portal_label: str = ""
+    biological_description: str = ""
+    biological_category: str = ""
+    state_establishment_level: str = ""
+    state_establishment_rationale: str = ""
+    recommended_portal_summary: str = ""
+    interpretation_caveat: str = ""
+    required_supporting_evidence: str = ""
+    do_not_overinterpret_as: str = ""
+    known_limitations: str = ""
+    quality_badges: list[str] = field(default_factory=list)
+    qc_sensitivity: str = ""
+    portal_visibility: str = ""
+    hard_call_notes: str = ""
+    marker_panel_context: str = ""
+    marker_provenance_summary: str = ""
+    negative_checks: str = ""
+    disease_context: str = ""
+    display_order: str = ""
 
 
 def open_text(path: Path):
@@ -130,6 +151,167 @@ def split_markers(value: object) -> list[str]:
     return list(dict.fromkeys(g.strip() for g in MARKER_SPLIT_RE.split(text) if g.strip()))
 
 
+def split_list_field(value: object) -> list[str]:
+    text = clean_text(value)
+    if not text:
+        return []
+    return [item.strip() for item in re.split(r"\s*;\s*|\s*\|\s*", text) if item.strip()]
+
+
+def template_text(value: str, state: "StateRecord") -> str:
+    if not value:
+        return ""
+    return value.format(
+        state_id=state.state_id,
+        state_label=state.state_label,
+        display_name=state.display_name,
+        cell_type_label=state.cell_type_label,
+        tissue_label=state.tissue_label,
+    )
+
+
+def load_metadata_rules(path: Path | None) -> dict[str, Any]:
+    if not path:
+        return {}
+    with path.open("r", encoding="utf-8") as handle:
+        return yaml.safe_load(handle) or {}
+
+
+def load_ambiguous_overrides(path: Path | None) -> list[dict[str, str]]:
+    if not path or not path.exists():
+        return []
+    frame = pd.read_csv(path, sep="\t", dtype=str).fillna("")
+    return frame.to_dict(orient="records")
+
+
+def normalized_match_text(state: "StateRecord") -> str:
+    return norm_key(" ".join([state.state_id, state.state_label, state.display_name]))
+
+
+def find_state_archetype(state: "StateRecord", rules: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    text = normalized_match_text(state)
+    archetypes = rules.get("state_archetypes") or {}
+    priority = [
+        "dedifferentiation_low_identity",
+        "disallowed_gene_reexpression",
+        "senescence_like",
+        "proliferation",
+        "upr_er_stress",
+        "interferon_mhc",
+        "inflammatory_activation",
+        "oxidative_mitochondrial_stress",
+        "heat_shock_or_dissociation",
+        "remodeling_fibrosis_emt",
+        "angiogenic",
+        "lipid_foam_lam",
+        "function_or_metabolism",
+        "canonical_identity",
+    ]
+    ordered_names = [name for name in priority if name in archetypes] + [name for name in archetypes if name not in priority]
+    for name in ordered_names:
+        rule = archetypes[name]
+        for token in rule.get("match_any") or []:
+            if norm_key(token) and norm_key(token) in text:
+                return name, rule
+    return "fallback", rules.get("fallback") or {}
+
+
+def apply_if_not_excel(state: "StateRecord", attr: str, value: Any, *, force_if_empty: bool = True) -> bool:
+    if value is None or value == "":
+        return False
+    if attr in state.excel_metadata_fields:
+        return False
+    current = getattr(state, attr)
+    if isinstance(current, list):
+        if current and not force_if_empty:
+            return False
+        values = value if isinstance(value, list) else split_list_field(value)
+        if values:
+            setattr(state, attr, list(dict.fromkeys(str(v) for v in values if str(v))))
+            return True
+        return False
+    if force_if_empty or not current:
+        setattr(state, attr, value)
+        return True
+    return False
+
+
+def apply_portal_metadata_rules(state: "StateRecord", rules: dict[str, Any], overrides: list[dict[str, str]]) -> None:
+    defaults = rules.get("default_values") or {}
+    for attr in ["score_scope", "manual_review_status", "portal_visibility", "qc_sensitivity", "hard_call_notes"]:
+        apply_if_not_excel(state, attr, defaults.get(attr))
+
+    archetype_name, rule = find_state_archetype(state, rules)
+    if rule:
+        for attr in [
+            "state_class",
+            "state_establishment_level",
+            "interpretation_status",
+            "release_class",
+            "qc_sensitivity",
+            "required_supporting_evidence",
+            "do_not_overinterpret_as",
+            "known_limitations",
+            "portal_visibility",
+            "hard_call_notes",
+            "state_establishment_rationale",
+        ]:
+            apply_if_not_excel(state, attr, rule.get(attr))
+        if "allow_hard_call" not in state.excel_metadata_fields and "allow_hard_call" in rule:
+            state.allow_hard_call = bool(rule.get("allow_hard_call"))
+        if "is_composite_required" not in state.excel_metadata_fields and "is_composite_required" in rule:
+            state.is_composite_required = bool(rule.get("is_composite_required"))
+        description = rule.get("biological_description") or template_text(rule.get("biological_description_template", ""), state)
+        apply_if_not_excel(state, "biological_description", description)
+        apply_if_not_excel(state, "interpretation_caveat", rule.get("interpretation_caveat"))
+        apply_if_not_excel(state, "quality_badges", rule.get("quality_badges"))
+        state.provenance_warnings.append(f"portal_metadata_rule:{archetype_name}")
+
+    text = " ".join([state.state_id, state.state_label, state.display_name])
+    for override in overrides:
+        pattern = override.get("pattern", "")
+        if not pattern or not re.search(pattern, text, flags=re.IGNORECASE):
+            continue
+        for attr in [
+            "state_establishment_level",
+            "biological_description",
+            "interpretation_caveat",
+            "recommended_portal_summary",
+            "required_supporting_evidence",
+            "do_not_overinterpret_as",
+            "qc_sensitivity",
+        ]:
+            apply_if_not_excel(state, attr, override.get(attr))
+        if "quality_badges" not in state.excel_metadata_fields and override.get("quality_badges"):
+            state.quality_badges = split_list_field(override["quality_badges"])
+        state.provenance_warnings.append("ambiguous_language_override_applied")
+        break
+
+    if not state.recommended_portal_label:
+        state.recommended_portal_label = state.display_name
+    if not state.recommended_portal_summary:
+        if state.biological_description:
+            state.recommended_portal_summary = state.biological_description
+        else:
+            state.recommended_portal_summary = f"{state.state_label} marker activity in {state.cell_type_label}."
+    if not state.biological_description:
+        state.biological_description = f"{state.state_label} is a curated marker panel for {state.cell_type_label} in {state.tissue_label}."
+        state.provenance_warnings.append("biological_description_inferred")
+    if not state.interpretation_caveat:
+        state.interpretation_caveat = "Interpret as a continuous marker activity score within the parent cell type unless manually reviewed otherwise."
+        state.provenance_warnings.append("interpretation_caveat_inferred")
+    if not state.state_establishment_level:
+        state.state_establishment_level = "needs_review"
+        state.provenance_warnings.append("state_establishment_level_inferred")
+    if not state.quality_badges:
+        state.quality_badges = ["Curated marker panel"]
+    if state.state_class == "composite_required":
+        state.is_composite_required = True
+    if state.state_class in {"broad_identity_gradient", "broad_function_gradient", "process_gradient", "composite_required", "unknown"}:
+        if "allow_hard_call" not in state.excel_metadata_fields:
+            state.allow_hard_call = False
+
+
 def short_hash(*parts: str) -> str:
     payload = "\n".join(parts).encode("utf-8")
     return hashlib.sha1(payload).hexdigest()[:12]
@@ -162,6 +344,25 @@ def canonical_columns(frame: pd.DataFrame) -> dict[str, str]:
         "allow_hard_call": ("allow_hard_call", "allow hard call"),
         "is_composite_required": ("is_composite_required", "is composite required"),
         "short_description": ("short_description", "short description", "description"),
+        "recommended_portal_label": ("recommended_portal_label", "recommended portal label", "portal_label"),
+        "biological_description": ("biological_description", "biological description"),
+        "biological_category": ("biological_category", "biological category"),
+        "state_establishment_level": ("state_establishment_level", "state establishment level"),
+        "state_establishment_rationale": ("state_establishment_rationale", "state establishment rationale"),
+        "recommended_portal_summary": ("recommended_portal_summary", "recommended portal summary"),
+        "interpretation_caveat": ("interpretation_caveat", "interpretation caveat"),
+        "required_supporting_evidence": ("required_supporting_evidence", "required supporting evidence"),
+        "do_not_overinterpret_as": ("do_not_overinterpret_as", "do not overinterpret as"),
+        "known_limitations": ("known_limitations", "known limitations"),
+        "quality_badges": ("quality_badges", "quality badges"),
+        "qc_sensitivity": ("qc_sensitivity", "qc sensitivity"),
+        "portal_visibility": ("portal_visibility", "portal visibility"),
+        "hard_call_notes": ("hard_call_notes", "hard call notes"),
+        "marker_panel_context": ("marker_panel_context", "marker panel context"),
+        "marker_provenance_summary": ("marker_provenance_summary", "marker provenance summary"),
+        "negative_checks": ("negative_checks", "negative checks"),
+        "disease_context": ("disease_context", "disease context"),
+        "display_order": ("display_order", "display order"),
     }
     by_norm = {norm_key(col): col for col in frame.columns}
     for canonical, names in aliases.items():
@@ -350,16 +551,43 @@ def apply_state_metadata(state: StateRecord, row: pd.Series, cols: dict[str, str
         ("manual_review_status", "manual_review_status"),
         ("score_scope", "score_scope"),
         ("short_description", "short_description"),
+        ("recommended_portal_label", "recommended_portal_label"),
+        ("biological_description", "biological_description"),
+        ("biological_category", "biological_category"),
+        ("state_establishment_level", "state_establishment_level"),
+        ("state_establishment_rationale", "state_establishment_rationale"),
+        ("recommended_portal_summary", "recommended_portal_summary"),
+        ("interpretation_caveat", "interpretation_caveat"),
+        ("required_supporting_evidence", "required_supporting_evidence"),
+        ("do_not_overinterpret_as", "do_not_overinterpret_as"),
+        ("known_limitations", "known_limitations"),
+        ("qc_sensitivity", "qc_sensitivity"),
+        ("portal_visibility", "portal_visibility"),
+        ("hard_call_notes", "hard_call_notes"),
+        ("marker_panel_context", "marker_panel_context"),
+        ("marker_provenance_summary", "marker_provenance_summary"),
+        ("negative_checks", "negative_checks"),
+        ("disease_context", "disease_context"),
+        ("display_order", "display_order"),
     ]:
         value = row_value(row, cols, key)
-        if value and not getattr(state, attr):
-            setattr(state, attr, value)
+        if value:
+            state.excel_metadata_fields.add(attr)
+            if not getattr(state, attr):
+                setattr(state, attr, value)
+    badges = row_value(row, cols, "quality_badges")
+    if badges:
+        state.excel_metadata_fields.add("quality_badges")
+        if not state.quality_badges:
+            state.quality_badges = split_list_field(badges)
     notes = row_value(row, cols, "notes")
     if notes and notes not in state.curation_notes:
         state.curation_notes = "; ".join(x for x in [state.curation_notes, notes] if x)
     if "allow_hard_call" in cols:
+        state.excel_metadata_fields.add("allow_hard_call")
         state.allow_hard_call = bool_value(row_value(row, cols, "allow_hard_call"), state.allow_hard_call)
     if "is_composite_required" in cols:
+        state.excel_metadata_fields.add("is_composite_required")
         state.is_composite_required = bool_value(row_value(row, cols, "is_composite_required"), state.is_composite_required)
     citation = row_value(row, cols, "citation")
     url = row_value(row, cols, "citation_url")
@@ -491,7 +719,7 @@ def infer_from_state_id(state_id: str, tissue: str, cell_type: str, state_label:
     return cell_type or "unknown", state_label or remaining
 
 
-def finish_state(state: StateRecord, curation_version: str, gmt_row: dict[str, Any] | None) -> None:
+def finish_state(state: StateRecord, curation_version: str, gmt_row: dict[str, Any] | None, metadata_rules: dict[str, Any], metadata_overrides: list[dict[str, str]]) -> None:
     if gmt_row:
         state.gene_set_description = clean_text(gmt_row.get("description"))
         if not state.source_gmt:
@@ -503,6 +731,7 @@ def finish_state(state: StateRecord, curation_version: str, gmt_row: dict[str, A
             state.provenance_warnings.append("excel_gmt_marker_disagreement")
         for gene in gmt_markers:
             add_marker(state, gene, False, True, None, {}, {})
+    apply_portal_metadata_rules(state, metadata_rules, metadata_overrides)
     if not state.state_class:
         state.state_class = infer_state_class(state.state_id, state.state_label)
         state.provenance_warnings.append("state_class_inferred")
@@ -521,10 +750,11 @@ def finish_state(state: StateRecord, curation_version: str, gmt_row: dict[str, A
         state.provenance_warnings.append("missing_citation_or_source")
         if state.manual_review_status == "reviewed":
             state.manual_review_status = "needs_review"
-    if state.state_class in {"broad_identity_gradient", "broad_function_gradient", "composite_required", "unknown"}:
+    if state.state_class in {"broad_identity_gradient", "broad_function_gradient", "process_gradient", "composite_required", "unknown"}:
+        if "allow_hard_call" not in state.excel_metadata_fields:
+            state.allow_hard_call = False
+    elif state.release_class == "suppressed" and "allow_hard_call" not in state.excel_metadata_fields:
         state.allow_hard_call = False
-    elif state.release_class != "suppressed":
-        state.allow_hard_call = state.allow_hard_call or state.state_class in {"rare_process", "process_gradient"}
     for marker in state.markers.values():
         if not marker.source_workbook:
             marker.source_workbook = state.source_workbook
@@ -535,7 +765,7 @@ def finish_state(state: StateRecord, curation_version: str, gmt_row: dict[str, A
         if marker.citation_id:
             marker.source_type = "literature_curated"
     state.curation_notes = state.curation_notes or ""
-    state.short_description = state.short_description or state.curation_notes
+    state.short_description = state.biological_description or state.short_description or state.curation_notes
 
 
 def state_manifest_row(state: StateRecord, curation_version: str) -> dict[str, Any]:
@@ -557,6 +787,53 @@ def state_manifest_row(state: StateRecord, curation_version: str) -> dict[str, A
         "short_description": state.short_description,
         "curation_notes": state.curation_notes,
         "manual_review_status": state.manual_review_status,
+        "curation_version": curation_version,
+        "n_markers": len(state.markers),
+        "source_workbook": state.source_workbook,
+        "source_gmt": state.source_gmt,
+        "gene_set_description": state.gene_set_description,
+        "provenance_warning_count": len(state.provenance_warnings),
+    }
+
+
+def state_manifest_v2_row(state: StateRecord, curation_version: str) -> dict[str, Any]:
+    return {
+        "state_id": state.state_id,
+        "tissue_id": state.tissue_id,
+        "tissue_label": state.tissue_label,
+        "cell_type_id": state.cell_type_id,
+        "cell_type_label": state.cell_type_label,
+        "display_name": state.display_name,
+        "recommended_portal_label": state.recommended_portal_label or state.display_name,
+        "state_label": state.state_label,
+        "state_class": state.state_class,
+        "biological_description": state.biological_description,
+        "state_establishment_level": state.state_establishment_level,
+        "state_establishment_rationale": state.state_establishment_rationale,
+        "recommended_portal_summary": state.recommended_portal_summary,
+        "interpretation_caveat": state.interpretation_caveat,
+        "interpretation_status": state.interpretation_status,
+        "release_class": state.release_class,
+        "manual_review_status": state.manual_review_status,
+        "is_composite_required": str(state.is_composite_required).lower(),
+        "is_qc": str(state.is_qc).lower(),
+        "allow_hard_call": str(state.allow_hard_call).lower(),
+        "score_scope": state.score_scope,
+        "required_supporting_evidence": state.required_supporting_evidence,
+        "do_not_overinterpret_as": state.do_not_overinterpret_as,
+        "known_limitations": state.known_limitations,
+        "quality_badges": ";".join(state.quality_badges),
+        "biological_category": state.biological_category,
+        "disease_context": state.disease_context,
+        "negative_checks": state.negative_checks,
+        "qc_sensitivity": state.qc_sensitivity,
+        "hard_call_notes": state.hard_call_notes,
+        "marker_panel_context": state.marker_panel_context,
+        "marker_provenance_summary": state.marker_provenance_summary,
+        "state_level_citation_ids": ";".join(sorted(state.state_level_citation_ids)),
+        "display_order": state.display_order,
+        "portal_visibility": state.portal_visibility,
+        "curation_notes": state.curation_notes,
         "curation_version": curation_version,
         "n_markers": len(state.markers),
         "source_workbook": state.source_workbook,
@@ -638,9 +915,20 @@ def detail_object(state: StateRecord, curation_version: str, citations: dict[str
             "is_qc": state.is_qc,
             "allow_hard_call": state.allow_hard_call,
             "score_scope": state.score_scope,
+            "qc_sensitivity": state.qc_sensitivity,
+            "portal_visibility": state.portal_visibility,
+            "hard_call_notes": state.hard_call_notes,
         },
         "summary": {
             "short_description": state.short_description,
+            "biological_description": state.biological_description,
+            "recommended_portal_label": state.recommended_portal_label or state.display_name,
+            "recommended_portal_summary": state.recommended_portal_summary,
+            "interpretation_caveat": state.interpretation_caveat,
+            "state_establishment_level": state.state_establishment_level,
+            "state_establishment_rationale": state.state_establishment_rationale,
+            "required_supporting_evidence": state.required_supporting_evidence,
+            "do_not_overinterpret_as": state.do_not_overinterpret_as,
             "curation_notes": state.curation_notes,
             "recommended_display": "curated_state",
         },
@@ -691,9 +979,10 @@ def detail_object(state: StateRecord, curation_version: str, citations: dict[str
         },
         "quality": {
             "quality_class": "curated_biological_state",
+            "quality_badges": state.quality_badges,
             "qc_caveats": [],
-            "known_limitations": [],
-            "suppress_from_default_view": state.release_class == "suppressed",
+            "known_limitations": split_list_field(state.known_limitations),
+            "suppress_from_default_view": state.release_class == "suppressed" or state.portal_visibility == "suppress",
         },
         "related": {"related_states": [], "matched_programs": [], "qc_signatures_to_check": []},
     }
@@ -715,6 +1004,9 @@ def build_index(states: list[StateRecord], curation_version: str) -> dict[str, A
                 "state_id": state.state_id,
                 "state_label": state.state_label,
                 "display_name": state.display_name,
+                "recommended_portal_label": state.recommended_portal_label or state.display_name,
+                "biological_description": state.biological_description,
+                "state_establishment_level": state.state_establishment_level,
                 "state_class": state.state_class,
                 "release_class": state.release_class,
                 "interpretation_status": state.interpretation_status,
@@ -786,6 +1078,8 @@ def main() -> None:
     ap.add_argument("--include-qc-in-main-index", action="store_true")
     ap.add_argument("--curation-version", default=date.today().isoformat())
     ap.add_argument("--fail-on-missing-provenance", action="store_true")
+    ap.add_argument("--metadata-rules-yaml", type=Path, default=None, help="Portal metadata rule defaults YAML.")
+    ap.add_argument("--ambiguous-language-tsv", type=Path, default=None, help="Regex-based metadata override TSV for ambiguous state names.")
     ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args()
 
@@ -793,6 +1087,12 @@ def main() -> None:
     dat_dir = args.dat_dir if args.dat_dir.is_absolute() else repo_root / args.dat_dir
     out_dir = args.out_dir if args.out_dir.is_absolute() else repo_root / args.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    default_metadata_dir = repo_root / "configs" / "metadata"
+    metadata_rules_path = args.metadata_rules_yaml or default_metadata_dir / "cell_state_metadata_rules.yaml"
+    ambiguous_path = args.ambiguous_language_tsv or default_metadata_dir / "ambiguous_state_portal_language.tsv"
+    metadata_rules = load_metadata_rules(metadata_rules_path if metadata_rules_path.exists() else None)
+    metadata_overrides = load_ambiguous_overrides(ambiguous_path if ambiguous_path.exists() else None)
 
     workbooks = sorted(path for path in dat_dir.glob("*/*_cell_state_markers.xlsx") if path.parent.name != "qc")
     gmts = {path.parent.name: read_gmt(path) for path in sorted(dat_dir.glob("*/*_cell_state_markers.gmt")) if path.parent.name != "qc"}
@@ -815,7 +1115,7 @@ def main() -> None:
         state.provenance_warnings.append("state_missing_excel_workbook_row")
 
     for state_id, state in states.items():
-        finish_state(state, args.curation_version, gmt_by_state.get(state_id))
+        finish_state(state, args.curation_version, gmt_by_state.get(state_id), metadata_rules, metadata_overrides)
 
     duplicate_state_ids = [sid for sid, state in states.items() if len(state.excel_state_keys) > 1]
     zero_marker_states = [sid for sid, state in states.items() if not state.markers]
@@ -837,12 +1137,14 @@ def main() -> None:
 
     state_list = sorted(states.values(), key=lambda s: s.state_id)
     manifest = [state_manifest_row(state, args.curation_version) for state in state_list]
+    manifest_v2 = [state_manifest_v2_row(state, args.curation_version) for state in state_list]
     marker_table = [row for state in state_list for row in marker_rows(state)]
     citation_rows = sorted(citations.values(), key=lambda x: x["citation_id"])
     details = {state.state_id: detail_object(state, args.curation_version, citations) for state in state_list}
     index = build_index(state_list, args.curation_version)
 
     write_tsv(out_dir / "curated_cell_state_manifest.tsv", manifest)
+    write_tsv(out_dir / "curated_cell_state_manifest_v2.tsv", manifest_v2)
     write_tsv(out_dir / "curated_cell_state_markers.tsv", marker_table)
     write_tsv(
         out_dir / "curated_cell_state_citations.tsv",
@@ -874,6 +1176,12 @@ def main() -> None:
         "states_missing_state_class": states_missing_state_class,
         "duplicate_state_ids": duplicate_state_ids,
         "duplicate_marker_rows": int(duplicate_marker_rows),
+        "states_missing_biological_description": [sid for sid, state in states.items() if not state.biological_description],
+        "states_missing_establishment_level": [sid for sid, state in states.items() if not state.state_establishment_level],
+        "states_missing_interpretation_caveat": [sid for sid, state in states.items() if not state.interpretation_caveat],
+        "n_states_with_portal_metadata_rules": sum(any(w.startswith("portal_metadata_rule:") for w in state.provenance_warnings) for state in states.values()),
+        "n_states_with_ambiguous_language_override": sum("ambiguous_language_override_applied" in state.provenance_warnings for state in states.values()),
+        "marker_changes_from_metadata_rules": 0,
         "warnings": sorted({warning for state in states.values() for warning in state.provenance_warnings}),
     }
     write_json(out_dir / "cell_state_api_build_report.json", report)

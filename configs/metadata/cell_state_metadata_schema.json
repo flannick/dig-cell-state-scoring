@@ -1,0 +1,151 @@
+{
+  "schema_version": "1.0",
+  "purpose": "Portal-facing metadata for curated cell states. This extends marker GMTs without changing marker genes.",
+  "primary_key": "state_id",
+  "tables": {
+    "curated_cell_state_manifest_v2.tsv": {
+      "description": "One row per curated biological state. This file should be the source for portal state cards.",
+      "required_columns": [
+        "state_id",
+        "tissue_id",
+        "tissue_label",
+        "cell_type_id",
+        "cell_type_label",
+        "display_name",
+        "recommended_portal_label",
+        "state_class",
+        "biological_description",
+        "state_establishment_level",
+        "interpretation_caveat",
+        "recommended_portal_summary",
+        "interpretation_status",
+        "release_class",
+        "manual_review_status",
+        "is_composite_required",
+        "allow_hard_call",
+        "score_scope",
+        "required_supporting_evidence",
+        "do_not_overinterpret_as",
+        "known_limitations",
+        "quality_badges",
+        "source_workbook",
+        "source_gmt",
+        "curation_version"
+      ],
+      "optional_columns": [
+        "state_establishment_rationale",
+        "biological_category",
+        "disease_context",
+        "negative_checks",
+        "qc_sensitivity",
+        "hard_call_notes",
+        "marker_panel_context",
+        "marker_provenance_summary",
+        "state_level_citation_ids",
+        "display_order",
+        "portal_visibility"
+      ]
+    },
+    "curated_cell_state_markers.tsv": {
+      "description": "One row per state-marker pair. Existing marker membership should not be changed by this metadata update.",
+      "required_columns": [
+        "state_id",
+        "gene",
+        "role",
+        "evidence_level",
+        "marker_notes",
+        "citation_id",
+        "citation_label",
+        "citation_url",
+        "source_type",
+        "source_workbook",
+        "source_gmt",
+        "from_excel",
+        "from_gmt"
+      ]
+    },
+    "cell_state_details_by_id.json": {
+      "description": "Resolved object per state_id for API use.",
+      "required_sections": [
+        "state_id",
+        "display_name",
+        "tissue",
+        "cell_type",
+        "state",
+        "summary",
+        "marker_set",
+        "state_level_citations",
+        "curation",
+        "scoring",
+        "human_genetics",
+        "quality",
+        "related"
+      ],
+      "new_summary_fields": [
+        "biological_description",
+        "recommended_portal_summary",
+        "interpretation_caveat",
+        "state_establishment_level",
+        "state_establishment_rationale",
+        "required_supporting_evidence",
+        "do_not_overinterpret_as"
+      ],
+      "new_quality_fields": [
+        "quality_badges",
+        "known_limitations",
+        "qc_sensitivity",
+        "portal_visibility",
+        "release_recommendation"
+      ]
+    }
+  },
+  "enums": {
+    "state_class": [
+      "broad_identity_gradient",
+      "broad_function_gradient",
+      "process_gradient",
+      "rare_process",
+      "composite_required",
+      "qc_or_contamination",
+      "unknown"
+    ],
+    "state_establishment_level": [
+      "canonical_identity",
+      "established_subtype_or_zonation",
+      "established_functional_state",
+      "well_established_process",
+      "disease_associated_established",
+      "generic_process_marker_panel",
+      "composite_requires_validation",
+      "emerging_context_dependent",
+      "exploratory_marker_panel",
+      "qc_or_artifact",
+      "needs_review"
+    ],
+    "interpretation_status": [
+      "continuous_gradient",
+      "continuous_or_hard_callable_if_separable",
+      "composite_required",
+      "hard_callable_if_validated",
+      "needs_review",
+      "qc_only"
+    ],
+    "release_class": [
+      "portal_default",
+      "portal_flagged",
+      "exploratory",
+      "suppressed"
+    ],
+    "manual_review_status": [
+      "reviewed",
+      "needs_review",
+      "not_reviewed"
+    ],
+    "portal_visibility": [
+      "show_default",
+      "show_with_caution",
+      "hide_by_default",
+      "suppress"
+    ]
+  }
+}

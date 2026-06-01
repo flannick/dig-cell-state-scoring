@@ -13,6 +13,14 @@ python scripts/build_curated_cell_state_api_json.py \
   --dat-dir dat \
   --out-dir dat/api \
   --curation-version 2026-05-26
+
+# Optional explicit metadata config paths. These default to the same files.
+python scripts/build_curated_cell_state_api_json.py \
+  --dat-dir dat \
+  --out-dir dat/api \
+  --curation-version 2026-05-26 \
+  --metadata-rules-yaml configs/metadata/cell_state_metadata_rules.yaml \
+  --ambiguous-language-tsv configs/metadata/ambiguous_state_portal_language.tsv
 ```
 
 To also build QC-signature API files:
@@ -59,6 +67,7 @@ The biological API files are:
 The normalized build tables are:
 
 - `dat/api/curated_cell_state_manifest.tsv`
+- `dat/api/curated_cell_state_manifest_v2.tsv`
 - `dat/api/curated_cell_state_markers.tsv`
 - `dat/api/curated_cell_state_citations.tsv`
 - `dat/api/cell_state_api_build_report.json`
@@ -108,12 +117,40 @@ When `--include-qc` is supplied, the QC API files are:
 
 `cell_state_details_by_id.json` is keyed by stable `state_id` for
 `GET /api/cell-states/{state_id}`. Each value includes display labels, state
-class, release status, provenance files, marker genes, marker-level citations,
-state-level citations, scoring policy, placeholder genetics links, and quality
-metadata.
+class, release status, portal-facing biological description, establishment
+level, interpretation caveat, required supporting evidence when relevant, marker
+genes, marker-level citations, state-level citations, scoring policy, placeholder
+genetics links, and quality metadata.
 
 `cell_state_api_records.jsonl` contains the same detail objects as
 newline-delimited JSON for loaders that prefer streaming records.
+
+
+## Portal Metadata Rules
+
+The builder applies portal-facing metadata defaults from
+`configs/metadata/cell_state_metadata_rules.yaml` and targeted ambiguous-language
+overrides from `configs/metadata/ambiguous_state_portal_language.tsv`. These
+files update descriptions and interpretation metadata only. They must not change
+`state_id` values, marker genes, GMT membership, citations, or scoring outputs.
+
+Workbook-supplied metadata wins when present. Rule defaults fill missing fields
+and replace only inferred values. The v2 manifest and details JSON include:
+
+- `biological_description`
+- `state_establishment_level`
+- `recommended_portal_summary`
+- `interpretation_caveat`
+- `required_supporting_evidence`
+- `do_not_overinterpret_as`
+- `quality_badges`
+- `qc_sensitivity`
+- `portal_visibility`
+
+Process-gradient states are treated as continuous activity gradients by default.
+Composite-required states such as dedifferentiation, disallowed-gene
+reexpression, and senescence-like programs are labeled as composite concepts and
+are not hard-called from marker activity alone.
 
 ## Provenance Rules
 
@@ -141,6 +178,11 @@ Each detail object includes `curation.provenance_warnings`. Common warnings are:
 
 - `state_class_inferred`: no state class was supplied in Excel, so the builder
   inferred it from the state name.
+- `portal_metadata_rule:<rule>`: a portal metadata rule supplied missing
+  biological description, establishment, caveat, or class metadata.
+- `ambiguous_language_override_applied`: a targeted ambiguous-state override
+  supplied portal-facing language for states such as dedifferentiation, UPR, or
+  IFN/MHC.
 - `release_class_inferred`: no release class was supplied in Excel.
 - `missing_citation_or_source`: the state has neither state-level nor
   marker-level citation/source provenance.

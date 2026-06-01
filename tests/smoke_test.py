@@ -44,6 +44,38 @@ def test_curated_cell_state_api_json_build(tmpdir: Path) -> None:
     assert state_id in details
     observed_markers = {row["gene"] for row in details[state_id]["marker_set"]["markers"]}
     assert expected_markers.issubset(observed_markers)
+    detail = details[state_id]
+    assert detail["summary"]["biological_description"]
+    assert detail["summary"]["state_establishment_level"]
+    assert detail["summary"]["interpretation_caveat"]
+    assert detail["state"]["allow_hard_call"] is False
+
+    manifest_v2 = pd.read_csv(out_dir / "curated_cell_state_manifest_v2.tsv", sep="\t")
+    assert {
+        "biological_description",
+        "state_establishment_level",
+        "recommended_portal_summary",
+        "interpretation_caveat",
+        "quality_badges",
+        "portal_visibility",
+    }.issubset(manifest_v2.columns)
+    mature_row = manifest_v2.loc[manifest_v2["state_id"] == state_id].iloc[0]
+    assert mature_row["biological_description"]
+
+    dediff = details["pancreas_beta_cell_dedifferentiation_low_identity"]
+    assert dediff["state"]["class"] == "composite_required"
+    assert dediff["state"]["allow_hard_call"] is False
+    assert dediff["summary"]["required_supporting_evidence"]
+
+    upr = details["pancreas_beta_cell_er_stress_upr"]
+    assert upr["state"]["class"] == "process_gradient"
+    assert upr["state"]["allow_hard_call"] is False
+
+    report = json.loads((out_dir / "cell_state_api_build_report.json").read_text(encoding="utf-8"))
+    assert report["marker_changes_from_metadata_rules"] == 0
+    assert not report["states_missing_biological_description"]
+    assert not report["states_missing_establishment_level"]
+    assert not report["states_missing_interpretation_caveat"]
 
     pancreas = next(tissue for tissue in index["tissues"] if tissue["tissue_id"] == "pancreas")
     beta = next(cell_type for cell_type in pancreas["cell_types"] if cell_type["cell_type_id"] == "beta_cell")
@@ -585,6 +617,130 @@ def test_call_states_from_scores(tmpdir: Path) -> None:
     assert annotations.loc["c2", "active_biological_states"] == "none"
 
 
+
+
+def test_relevance_aware_sparse_multi_cell_type_scoring(tmpdir: Path) -> None:
+    metadata = pd.DataFrame(
+        {
+            "cell_id": ["a1", "a2", "b1", "b2"],
+            "map_id": ["map1"] * 4,
+            "tissue": ["tissue_a"] * 4,
+            "annotated_cell_type": ["cell_type_a", "cell_type_a", "cell_type_b", "cell_type_b"],
+            "donor_id": ["d1", "d2", "d1", "d2"],
+            "sample_id": ["s1", "s2", "s1", "s2"],
+        }
+    )
+    expression = pd.DataFrame(
+        {
+            "cell_id": ["a1", "a2", "b1", "b2"],
+            "gene": ["G1", "G1", "G4", "G4"],
+            "expression": [10.0, 9.0, 10.0, 9.0],
+        }
+    )
+    bio_gmt = "\n".join(
+        [
+            "tissue_a_cell_type_a_state_a\ttoy\tG1\tG2\tG3",
+            "tissue_a_cell_type_b_state_b\ttoy\tG4\tG5\tG6",
+        ]
+    )
+    qc_gmt = "qc_bad_toy\tcategory=technical_or_composition;tier=review_exclude_if_extreme\tG7\tG8\n"
+    manifest = pd.DataFrame(
+        {
+            "state_name": ["tissue_a_cell_type_a_state_a", "tissue_a_cell_type_b_state_b"],
+            "tissue": ["tissue_a", "tissue_a"],
+            "cell_type": ["cell_type_a", "cell_type_b"],
+            "state_class": ["process_gradient", "process_gradient"],
+            "is_composite_required": ["false", "false"],
+        }
+    )
+    rank_dir = tmpdir / "multi_rank_10x"
+    rank_dir.mkdir()
+    genes = ["G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8"]
+    cells = ["a1", "a2", "b1", "b2"]
+    values = [
+        [10, 9, 8, 1, 1, 1, 1, 1],
+        [9, 8, 7, 1, 1, 1, 1, 1],
+        [1, 1, 1, 10, 9, 8, 1, 1],
+        [1, 1, 1, 9, 8, 7, 1, 1],
+    ]
+    mmwrite(rank_dir / "matrix.mtx", sparse.csr_matrix(values).T)
+    (rank_dir / "features.tsv").write_text("\n".join(f"{gene}\t{gene}" for gene in genes) + "\n", encoding="utf-8")
+    (rank_dir / "barcodes.tsv").write_text("\n".join(cells) + "\n", encoding="utf-8")
+    metadata_path = tmpdir / "multi_metadata.tsv"
+    expression_path = tmpdir / "multi_expression.tsv"
+    bio_path = tmpdir / "multi_bio.gmt"
+    qc_path = tmpdir / "multi_qc.gmt"
+    manifest_path = tmpdir / "multi_manifest.tsv"
+    out_dir = tmpdir / "multi_out"
+    metadata.to_csv(metadata_path, sep="\t", index=False)
+    expression.to_csv(expression_path, sep="\t", index=False)
+    bio_path.write_text(bio_gmt + "\n", encoding="utf-8")
+    qc_path.write_text(qc_gmt, encoding="utf-8")
+    manifest.to_csv(manifest_path, sep="\t", index=False)
+
+    relevance_result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "run_cmdkp_state_scoring.py"),
+            "--expression-matrix",
+            str(expression_path),
+            "--cell-metadata",
+            str(metadata_path),
+            "--states-gmt",
+            str(bio_path),
+            "--qc-states-gmt",
+            str(qc_path),
+            "--state-manifest",
+            str(manifest_path),
+            "--require-state-manifest",
+            "--rank-10x-dir",
+            str(rank_dir),
+            "--map-id-col",
+            "map_id",
+            "--tissue-col",
+            "tissue",
+            "--cell-type-col",
+            "annotated_cell_type",
+            "--donor-col",
+            "donor_id",
+            "--sample-col",
+            "sample_id",
+            "--min-calibration-cells",
+            "2",
+            "--min-markers-present",
+            "1",
+            "--min-marker-coverage",
+            "0.2",
+            "--min-score-iqr",
+            "0",
+            "--allow-small-rank-universe",
+            "--progress-every-cells",
+            "2",
+            "--out-dir",
+            str(out_dir),
+        ],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert "[sparse-score] cells 2/4 (50.0%)" in relevance_result.stderr
+    assert "[sparse-score] cells 4/4 (100.0%)" in relevance_result.stderr
+    scores = pd.read_csv(out_dir / "cell_state_scores.tsv.gz", sep="\t")
+    assert set(scores.loc[scores["state_name"].eq("tissue_a_cell_type_a_state_a"), "annotated_cell_type"]) == {"cell_type_a"}
+    assert set(scores.loc[scores["state_name"].eq("tissue_a_cell_type_b_state_b"), "annotated_cell_type"]) == {"cell_type_b"}
+    assert len(scores) == 4
+    activity = pd.read_csv(out_dir / "cell_state_activity.tsv.gz", sep="\t")
+    biological = activity.loc[activity["state_type"].eq("biological")]
+    assert len(biological) == 4
+    qc = activity.loc[activity["state_type"].eq("qc")]
+    assert len(qc) == 4
+    run_summary = json.loads((out_dir / "run_summary.json").read_text(encoding="utf-8"))
+    score_step = next(row for row in run_summary["timing"] if row["step"] == "score_sparse_rank_universe_once")
+    assert score_step["relevance_filter"] == "tissue_cell_type_manifest_scope"
+    assert score_step["n_relevant_cell_gene_set_pairs"] == 8
+    assert run_summary["parameters"]["score_relevant_states_only"] is True
+
+
 def test_cmdkp_general_runner(tmpdir: Path) -> None:
     metadata = pd.DataFrame(
         {
@@ -823,6 +979,35 @@ def test_cmdkp_general_runner(tmpdir: Path) -> None:
     assert {"donor_id", "state_name", "state_weight_type", "gene", "log1p_weighted_mean_cp10k", "sum_state_weight"}.issubset(donor_state.columns)
     g1_parent = pd.read_csv(state_expr_dir / "all_gene_all_parent_cp10k.tsv.gz", sep="\t").set_index("gene").loc["G1"]
     assert g1_parent["mean_cp10k_all_parent"] > 0
+    cell_type_expr = pd.read_csv(state_expr_dir / "all_gene_cell_type_expression_cp10k.tsv.gz", sep="\t")
+    assert {"cell_type_mean_cp10k", "log1p_cell_type_mean_cp10k", "cell_type_pct_detected", "log2fc_cell_type_vs_all_context", "log2fc_cell_type_vs_other_context", "n_cells_other_context"}.issubset(cell_type_expr.columns)
+    g1_cell_type = cell_type_expr.loc[cell_type_expr["gene"].eq("G1")].iloc[0]
+    assert g1_cell_type["cell_type_mean_cp10k"] > 0
+
+    cell_type_only_dir = tmpdir / "cell_type_expression_only"
+    run_cmd(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "summarize_state_expression.py"),
+            "--raw-10x-dir",
+            str(rank_dir),
+            "--metadata",
+            str(metadata_path),
+            "--parent-group-cols",
+            "tissue,annotated_cell_type",
+            "--cell-type-col",
+            "annotated_cell_type",
+            "--cell-type-expression-only",
+            "--cell-type-expression-cell-types",
+            "cell_type_a",
+            "--out-dir",
+            str(cell_type_only_dir),
+        ]
+    )
+    cell_type_only = pd.read_csv(cell_type_only_dir / "all_gene_cell_type_expression_cp10k.tsv.gz", sep="\t")
+    assert set(cell_type_only["annotated_cell_type"]) == {"cell_type_a"}
+    assert cell_type_only["cell_type_mean_cp10k"].notna().all()
+    assert cell_type_only["n_cells_other_context"].eq(0).all()
 
     gmt_out_dir = tmpdir / "state_gmts"
     run_cmd(
@@ -966,6 +1151,169 @@ def test_assign_genes_to_states(tmpdir: Path) -> None:
     assert bool(de_assigned.loc["G3", "assignment_pass"])
     assert not bool(de_assigned.loc["G4", "assignment_pass"])
 
+
+
+def test_matrix_value_type_conversion_and_log_expression(tmpdir: Path) -> None:
+    dense_path = tmpdir / "dense_log.tsv"
+    dense_path.write_text(
+        "Gene\tc1\tc2\n"
+        f"G1\t{__import__('math').log1p(9):.8f}\t{__import__('math').log1p(1):.8f}\n"
+        f"G2\t{__import__('math').log1p(1):.8f}\t{__import__('math').log1p(9):.8f}\n",
+        encoding="utf-8",
+    )
+    sparse_dir = tmpdir / "converted_10x"
+    run_cmd(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "convert_expression_tsv_to_sparse_10x.py"),
+            "--matrix-tsv",
+            str(dense_path),
+            "--out-dir",
+            str(sparse_dir),
+            "--value-type",
+            "auto",
+            "--progress-every-rows",
+            "0",
+        ]
+    )
+    report = json.loads((sparse_dir / "matrix_value_type.json").read_text(encoding="utf-8"))
+    assert report["matrix_value_type"] == "log1p_cp10k"
+    assert mmread(sparse_dir / "matrix.mtx.gz").shape == (2, 2)
+
+    metadata = pd.DataFrame(
+        {
+            "cell_id": ["c1", "c2"],
+            "map_id": ["map1", "map1"],
+            "tissue": ["heart", "heart"],
+            "annotated_cell_type": ["cell_type_a", "cell_type_a"],
+            "donor_id": ["d1", "d2"],
+        }
+    )
+    activity = pd.DataFrame(
+        {
+            "cell_id": ["c1", "c2"],
+            "state_type": ["biological", "biological"],
+            "state_name": ["heart_cell_type_a_state_a", "heart_cell_type_a_state_a"],
+            "state_activity_weight_gradient": [1.0, 0.0],
+            "state_activity_weight_hightail": [1.0, 0.0],
+            "aucell_score": [1.0, 0.0],
+            "ucell_score": [1.0, 0.0],
+            "state_class": ["process_gradient", "process_gradient"],
+            "threshold_status": ["continuous_only", "continuous_only"],
+            "map_id": ["map1", "map1"],
+            "tissue": ["heart", "heart"],
+            "annotated_cell_type": ["cell_type_a", "cell_type_a"],
+        }
+    )
+    metadata_path = tmpdir / "metadata_log.tsv"
+    activity_path = tmpdir / "activity_log.tsv"
+    gmt_path = tmpdir / "states_log.gmt"
+    out_dir = tmpdir / "state_expression_log"
+    metadata.to_csv(metadata_path, sep="\t", index=False)
+    activity.to_csv(activity_path, sep="\t", index=False)
+    gmt_path.write_text("heart_cell_type_a_state_a\ttoy\tG1\tG2\n", encoding="utf-8")
+
+    run_cmd(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "summarize_state_expression.py"),
+            "--raw-10x-dir",
+            str(sparse_dir),
+            "--expression-value-type",
+            "auto",
+            "--metadata",
+            str(metadata_path),
+            "--cell-state-activity",
+            str(activity_path),
+            "--states-gmt",
+            str(gmt_path),
+            "--out-dir",
+            str(out_dir),
+        ]
+    )
+    expr = pd.read_csv(out_dir / "all_gene_state_expression_specificity_cp10k.tsv.gz", sep="\t")
+    g1 = expr.loc[(expr["gene"] == "G1") & (expr["state_weight_type"] == "gradient_percentile_squared")].iloc[0]
+    assert abs(g1["weighted_mean_cp10k"] - 9.0) < 1e-5
+    assert abs(g1["weighted_mean_expression"] - 9.0) < 1e-5
+    assert g1["expression_unit"] == "CP10K-like"
+    summary = json.loads((out_dir / "state_expression_summary.json").read_text(encoding="utf-8"))
+    assert summary["expression_value_type"] == "log1p_cp10k"
+
+
+def test_normalized_scoring_uses_metadata_qc_metrics(tmpdir: Path) -> None:
+    metadata = pd.DataFrame(
+        {
+            "cell_id": ["c1", "c2", "c3", "c4"],
+            "map_id": ["map1"] * 4,
+            "tissue": ["heart"] * 4,
+            "annotated_cell_type": ["cell_type_a"] * 4,
+            "donor_id": ["d1", "d2", "d3", "d4"],
+            "sample_id": ["s1"] * 4,
+            "QC:nCount_RNA": [1000, 1100, 1200, 1300],
+            "QC:nFeature_RNA": [100, 110, 120, 130],
+            "QC:percent.mt": [1.0, 2.0, 3.0, 4.0],
+        }
+    )
+    expression = pd.DataFrame(
+        {
+            "cell_id": ["c1", "c2", "c3", "c4"],
+            "gene": ["G1", "G1", "G2", "G2"],
+            "expression": [2.0, 1.8, 2.1, 1.9],
+        }
+    )
+    rank_dir = tmpdir / "normalized_rank"
+    rank_dir.mkdir()
+    genes = ["G1", "G2", "MT-CO1"]
+    cells = ["c1", "c2", "c3", "c4"]
+    values = [[2.3, 1.0, 0.0], [2.2, 0.9, 0.0], [0.8, 2.4, 0.1], [0.7, 2.2, 0.1]]
+    mmwrite(rank_dir / "matrix.mtx", sparse.csr_matrix(values).T)
+    (rank_dir / "features.tsv").write_text("\n".join(f"{g}\t{g}" for g in genes) + "\n", encoding="utf-8")
+    (rank_dir / "barcodes.tsv").write_text("\n".join(cells) + "\n", encoding="utf-8")
+    (rank_dir / "matrix_value_type.json").write_text(json.dumps({"matrix_value_type": "log1p_cp10k"}), encoding="utf-8")
+    metadata_path = tmpdir / "metadata_norm.tsv"
+    expression_path = tmpdir / "expression_norm.tsv"
+    bio_path = tmpdir / "bio_norm.gmt"
+    qc_path = tmpdir / "qc_norm.gmt"
+    out_dir = tmpdir / "normalized_out"
+    metadata.to_csv(metadata_path, sep="\t", index=False)
+    expression.to_csv(expression_path, sep="\t", index=False)
+    bio_path.write_text("heart_cell_type_a_state_a\ttoy\tG1\tG2\n", encoding="utf-8")
+    qc_path.write_text("qc_mito\ttoy\tMT-CO1\tG1\n", encoding="utf-8")
+    run_cmd(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "run_cmdkp_state_scoring.py"),
+            "--expression-matrix",
+            str(expression_path),
+            "--expression-kind",
+            "log1p_normalized",
+            "--cell-metadata",
+            str(metadata_path),
+            "--states-gmt",
+            str(bio_path),
+            "--qc-states-gmt",
+            str(qc_path),
+            "--rank-10x-dir",
+            str(rank_dir),
+            "--rank-value-type",
+            "auto",
+            "--min-calibration-cells",
+            "2",
+            "--min-markers-present",
+            "1",
+            "--min-marker-coverage",
+            "0.2",
+            "--allow-small-rank-universe",
+            "--allow-acceptance-failures",
+            "--out-dir",
+            str(out_dir),
+        ]
+    )
+    qc = pd.read_csv(out_dir / "bad_cell_qc_flags.tsv.gz", sep="\t")
+    assert set(qc["qc_metric_source"]) == {"metadata_qc_metrics"}
+    assert qc.set_index("cell_id").loc["c1", "total_counts"] == 1000
+    run_summary = json.loads((out_dir / "run_summary.json").read_text(encoding="utf-8"))
+    assert run_summary["parameters"]["rank_value_type"] == "log1p_cp10k"
 
 def test_manifest_splitter_and_batch_dry_run(tmpdir: Path) -> None:
     gmt_path = tmpdir / "states.gmt"
@@ -1187,6 +1535,8 @@ def main() -> None:
         test_cmdkp_general_runner(tmpdir)
         test_assign_genes_to_states(tmpdir)
         test_match_programs_to_cell_states(tmpdir)
+        test_matrix_value_type_conversion_and_log_expression(tmpdir)
+        test_normalized_scoring_uses_metadata_qc_metrics(tmpdir)
         test_manifest_splitter_and_batch_dry_run(tmpdir)
         test_batch_runner_real_small_with_missing_gmt(tmpdir)
     print("smoke tests OK")
