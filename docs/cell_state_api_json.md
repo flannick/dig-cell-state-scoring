@@ -66,8 +66,8 @@ The biological API files are:
 
 The normalized build tables are:
 
-- `dat/api/curated_cell_state_manifest.tsv`
-- `dat/api/curated_cell_state_manifest_v2.tsv`
+- `dat/api/curated_cell_state_manifest.tsv` (canonical enhanced manifest)
+- `dat/api/curated_cell_state_manifest_v2.tsv` (deprecated duplicate retained temporarily for compatibility)
 - `dat/api/curated_cell_state_markers.tsv`
 - `dat/api/curated_cell_state_citations.tsv`
 - `dat/api/cell_state_api_build_report.json`
@@ -124,6 +124,17 @@ genetics links, and quality metadata.
 
 `cell_state_api_records.jsonl` contains the same detail objects as
 newline-delimited JSON for loaders that prefer streaming records.
+
+`curated_cell_state_manifest.tsv` is the canonical enhanced tabular manifest for
+BioIndex and portal state-card ingestion. It includes portal-facing biological
+descriptions, establishment levels, summaries, caveats, supporting-evidence
+requirements, quality badges, QC sensitivity, and visibility metadata. The old
+reduced manifest schema is no longer produced.
+
+`curated_cell_state_manifest_v2.tsv` is retained temporarily as a deprecated
+duplicate of `curated_cell_state_manifest.tsv` for compatibility. Consumers
+should use `curated_cell_state_manifest.tsv` for tabular ingestion and
+`cell_state_details_by_id.json` for full state-card JSON.
 
 
 ## Portal Metadata Rules

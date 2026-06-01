@@ -50,16 +50,20 @@ def test_curated_cell_state_api_json_build(tmpdir: Path) -> None:
     assert detail["summary"]["interpretation_caveat"]
     assert detail["state"]["allow_hard_call"] is False
 
+    manifest = pd.read_csv(out_dir / "curated_cell_state_manifest.tsv", sep="\t")
     manifest_v2 = pd.read_csv(out_dir / "curated_cell_state_manifest_v2.tsv", sep="\t")
-    assert {
+    enhanced_cols = {
         "biological_description",
         "state_establishment_level",
         "recommended_portal_summary",
         "interpretation_caveat",
         "quality_badges",
         "portal_visibility",
-    }.issubset(manifest_v2.columns)
-    mature_row = manifest_v2.loc[manifest_v2["state_id"] == state_id].iloc[0]
+    }
+    assert enhanced_cols.issubset(manifest.columns)
+    assert enhanced_cols.issubset(manifest_v2.columns)
+    pd.testing.assert_frame_equal(manifest, manifest_v2)
+    mature_row = manifest.loc[manifest["state_id"] == state_id].iloc[0]
     assert mature_row["biological_description"]
 
     dediff = details["pancreas_beta_cell_dedifferentiation_low_identity"]

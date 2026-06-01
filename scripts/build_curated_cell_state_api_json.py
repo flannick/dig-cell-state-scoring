@@ -1136,8 +1136,8 @@ def main() -> None:
         raise SystemExit("; ".join(failures))
 
     state_list = sorted(states.values(), key=lambda s: s.state_id)
-    manifest = [state_manifest_row(state, args.curation_version) for state in state_list]
-    manifest_v2 = [state_manifest_v2_row(state, args.curation_version) for state in state_list]
+    manifest = [state_manifest_v2_row(state, args.curation_version) for state in state_list]
+    manifest_v2 = manifest
     marker_table = [row for state in state_list for row in marker_rows(state)]
     citation_rows = sorted(citations.values(), key=lambda x: x["citation_id"])
     details = {state.state_id: detail_object(state, args.curation_version, citations) for state in state_list}
