@@ -226,6 +226,12 @@ def write_gmt(rows, path):
 
 def normalize_cell_id(cell_id):
     text = str(cell_id)
+    # Some LIGER score files prefix source objects before the real matrix cell ID,
+    # e.g. Eraslan_muscle_referenced.qs_GTEX-... or STARNET_muscle_referenced.qs_1305_... .
+    # Strip through referenced.qs_ first; keep biological/sample suffixes such as -skeletalmuscle.
+    marker = "referenced.qs_"
+    if marker in text:
+        return text.rsplit(marker, 1)[1]
     if "_" in text:
         tail = text.split("_", 1)[1]
         if "-" in tail:

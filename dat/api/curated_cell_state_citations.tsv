@@ -5,8 +5,10 @@ citation_032af2e1a11c	CellMarker 2.0, manually curated human/mouse cell marker d
 citation_03e621016dbb	Human Protein Atlas immune cell single-cell resource					https://www.proteinatlas.org/humanproteome/single%2Bcell/immune%2Bcell				Human Protein Atlas immune cell single-cell resource
 citation_06bfb5979b2c	Steuernagel et al., Nature Metabolism 2022, murine HypoMap					https://pmc.ncbi.nlm.nih.gov/articles/PMC9584816/				Steuernagel et al., Nature Metabolism 2022, murine HypoMap
 citation_06f24306648e	Bondareva et al., Nature Metabolism 2022, endothelial cell obesity atlas					https://www.nature.com/articles/s42255-022-00674-x				Bondareva et al., Nature Metabolism 2022, endothelial cell obesity atlas
+citation_081d5e2f1f71	Human Protein Atlas immune cell resource					https://www.proteinatlas.org/humanproteome/single+cell/immune+cell				Human Protein Atlas immune cell resource
 citation_0d2480c8edb8	Kuppe et al. 2022 Nature, spatial multi-omic map of human myocardial infarction					https://www.nature.com/articles/s41586-022-05060-x				Kuppe et al. 2022 Nature, spatial multi-omic map of human myocardial infarction
 citation_0d6683582aa2	Traeuble et al. 2025 Nat Commun, integrated single-cell atlas of human atherosclerotic plaques					https://www.nature.com/articles/s41467-025-63202-x				Traeuble et al. 2025 Nat Commun, integrated single-cell atlas of human atherosclerotic plaques
+citation_1229a55aad90	Human Protein Atlas single cell type resource					https://www.proteinatlas.org/humanproteome/single+cell/single+cell+type				Human Protein Atlas single cell type resource
 citation_17b45b25a630	Segerstolpe 2016 Cell Metabolism					https://www.sciencedirect.com/science/article/pii/S1550413116304363				Segerstolpe 2016 Cell Metabolism
 citation_1b1a1b60742a	Cha 2023 Biology					https://pmc.ncbi.nlm.nih.gov/articles/PMC10501801/				Cha 2023 Biology
 citation_1b862671bd5c	Muraro 2016 Cell Systems					https://www.sciencedirect.com/science/article/pii/S2405471216302927				Muraro 2016 Cell Systems
@@ -35,6 +37,7 @@ citation_4f32cc0cfef9	Dick 2022 Science Immunology					https://www.science.org/d
 citation_52b71413b1a0	MSigDB Hallmark G2M Checkpoint					https://www.gsea-msigdb.org/gsea/msigdb/human/geneset/HALLMARK_G2M_CHECKPOINT.html				MSigDB Hallmark G2M Checkpoint
 citation_52bf14c4615f	Wang et al. 2024, human visceral adipose APC subsets					https://www.nature.com/articles/s41467-024-48914-w				Wang et al. 2024, human visceral adipose APC subsets
 citation_550da8a0f91a	Human Protein Atlas, single nuclei brain glial cells					https://www.proteinatlas.org/humanproteome/single%2Bcell/single%2Bnuclei%2Bbrain/glial%2Bcells				Human Protein Atlas, single nuclei brain glial cells
+citation_55812028f597	Tissue-resident memory T cells review					https://www.cell.com/immunity/fulltext/S1074-7613(14)00433-0				Tissue-resident memory T cells review
 citation_599ba2b3ccb6	Krasniewski et al. 2022 eLife, skeletal muscle macrophage subpopulations					https://elifesciences.org/articles/77974				Krasniewski et al. 2022 eLife, skeletal muscle macrophage subpopulations
 citation_59d2440db147	Mosquera et al. 2023 Cell Reports, integrative single-cell meta-analysis of human atherosclerosis					https://www.sciencedirect.com/science/article/pii/S221112472301392X				Mosquera et al. 2023 Cell Reports, integrative single-cell meta-analysis of human atherosclerosis
 citation_5bf1ef3e85b9	Emont et al. 2022, single-cell atlas of human and mouse WAT					https://pmc.ncbi.nlm.nih.gov/articles/PMC9504827/				Emont et al. 2022, single-cell atlas of human and mouse WAT
@@ -54,6 +57,7 @@ citation_72a699cd3be6	Aizarani et al., Nature 2019					https://www.nature.com/ar
 citation_7386d418b324	Li et al., 2021, Frontiers in Cell and Developmental Biology					https://www.frontiersin.org/journals/cell-and-developmental-biology/articles/10.3389/fcell.2021.629515/full				Li et al., 2021, Frontiers in Cell and Developmental Biology
 citation_7756c2c696f2	Backdahl et al., Cell Metabolism 2021, spatial mapping of human adipocyte subpopulations					https://www.cell.com/cell-metabolism/fulltext/S1550-4131(21)00363-6				Backdahl et al., Cell Metabolism 2021, spatial mapping of human adipocyte subpopulations
 citation_77762a3bc36a	Zhao et al., Cell Discovery 2020					https://www.nature.com/articles/s41421-020-0157-z				Zhao et al., Cell Discovery 2020
+citation_7ef0912d8cc6	Tabula Sapiens 2022 Science					https://www.science.org/doi/10.1126/science.abl4896				Tabula Sapiens 2022 Science
 citation_7fdd72b4946d	HuBMAP Azimuth Human Kidney Reference Explorer, human kidney reference annotations and marker lists					https://azimuth.hubmapconsortium.org/references/human_kidney/				HuBMAP Azimuth Human Kidney Reference Explorer, human kidney reference annotations and marker lists
 citation_8030ff7a3606	Depuydt et al. 2023 Nat Cardiovasc Res, plaque TCR-seq and effector T-cell states					https://www.nature.com/articles/s44161-022-00208-4				Depuydt et al. 2023 Nat Cardiovasc Res, plaque TCR-seq and effector T-cell states
 citation_81315661857c	Maestas 2024 Nature Communications					https://www.nature.com/articles/s41467-024-49724-w				Maestas 2024 Nature Communications
@@ -68,15 +72,18 @@ citation_97aee7ffb60c	PanglaoDB, curated and integrated cell-type marker resourc
 citation_9814d4d5d978	Mimpen et al., 2024, PubMed record					https://pubmed.ncbi.nlm.nih.gov/38742770/				Mimpen et al., 2024, PubMed record
 citation_9b0e62a4ea38	Petrany et al. 2020 Nature Communications, skeletal myofiber myonuclear heterogeneity					https://www.nature.com/articles/s41467-020-20063-w				Petrany et al. 2020 Nature Communications, skeletal myofiber myonuclear heterogeneity
 citation_9bb2a5f076a5	HLA-DRA NCBI Gene					https://www.ncbi.nlm.nih.gov/gene/3122				HLA-DRA NCBI Gene
+citation_9c0d480c2158	FOXP3/Treg marker reference					https://www.ncbi.nlm.nih.gov/gene/50943				FOXP3/Treg marker reference
 citation_9d42eedf2d29	Barnett et al., 2024, Nature Medicine human vascular cell atlas					https://www.nature.com/articles/s41591-024-03376-x				Barnett et al., 2024, Nature Medicine human vascular cell atlas
 citation_a15f2645f79f	Hu et al., Nucleic Acids Research 2023, CellMarker 2.0					https://pubmed.ncbi.nlm.nih.gov/36300619/				Hu et al., Nucleic Acids Research 2023, CellMarker 2.0
 citation_a1c6cbb6bced	Bai et al., Scientific Reports 2024, human embryonic tanycytes					https://www.nature.com/articles/s41598-024-66044-7				Bai et al., Scientific Reports 2024, human embryonic tanycytes
+citation_aae4d997c423	CellMarker 2.0					https://academic.oup.com/nar/article/51/D1/D870/6775381				CellMarker 2.0
 citation_abbec1269ed3	van Gurp 2022 Nature Communications					https://www.nature.com/articles/s41467-022-29588-8				van Gurp 2022 Nature Communications
 citation_ac847ca72709	Mareckova et al. 2024, Human Endometrial Cell Atlas					https://www.nature.com/articles/s41588-024-01873-w				Mareckova et al. 2024, Human Endometrial Cell Atlas
 citation_ae8cf0f8b1d1	Westcott et al. 2021, mesothelial cells and visceral adipose depots					https://pmc.ncbi.nlm.nih.gov/articles/PMC8317472/				Westcott et al. 2021, mesothelial cells and visceral adipose depots
 citation_b091ce59c82e	Lake et al. 2023 Nature, An atlas of healthy and injured cell states and niches in the human kidney					https://www.nature.com/articles/s41586-023-05769-3				Lake et al. 2023 Nature, An atlas of healthy and injured cell states and niches in the human kidney
 citation_b0e716a95960	Hildreth et al. 2021, human WAT cell states in health and obesity					https://pmc.ncbi.nlm.nih.gov/articles/PMC8102391/				Hildreth et al. 2021, human WAT cell states in health and obesity
 citation_b11a8ce1ddce	Lai et al. 2024 Nature, multimodal human skeletal muscle atlas					https://www.nature.com/articles/s41586-024-07348-6				Lai et al. 2024 Nature, multimodal human skeletal muscle atlas
+citation_b12615f96b2d	Schwann cell marker reference					https://www.proteinatlas.org/humanproteome/single+cell/single+cell+type				Schwann cell marker reference
 citation_b2d93d42ba21	CellMarker 2.0, Nucleic Acids Research, 2023					https://pubmed.ncbi.nlm.nih.gov/36300619/				CellMarker 2.0, Nucleic Acids Research, 2023
 citation_b4c17b20155a	Angueira et al. 2021 Nat Metab, thermogenic perivascular adipose tissue lineage					https://pmc.ncbi.nlm.nih.gov/articles/PMC8136151/				Angueira et al. 2021 Nat Metab, thermogenic perivascular adipose tissue lineage
 citation_b4e5e7a1d0ed	Menon et al. 2020 JCI Insight, Single cell transcriptomics identifies renal endothelial cell signatures					https://insight.jci.org/articles/view/133267/figure/7				Menon et al. 2020 JCI Insight, Single cell transcriptomics identifies renal endothelial cell signatures
@@ -93,6 +100,7 @@ citation_c3cc8f2d6d7b	Willemsen and de Winther 2020 Cardiovasc Res, macrophage s
 citation_c3e89218c4a8	Hao et al., Nature Genetics 2022					https://pmc.ncbi.nlm.nih.gov/articles/PMC9633381/				Hao et al., Nature Genetics 2022
 citation_c8f47cdd02a6	General human vascular marker consensus cross-checked against Massier et al. 2023 and Bondareva et al. 2022					https://www.nature.com/articles/s41467-023-36983-2				General human vascular marker consensus cross-checked against Massier et al. 2023 and Bondareva et al. 2022
 citation_cc613e39ad69	Saxena et al. 2021 Nature Communications, Kidney intercalated cells are phagocytic and acidify internalized uropathogenic E. coli					https://www.nature.com/articles/s41467-021-22672-5				Saxena et al. 2021 Nature Communications, Kidney intercalated cells are phagocytic and acidify internalized uropathogenic E. coli
+citation_cd783180d5a9	Lymphatic endothelial marker reference					https://www.proteinatlas.org/humanproteome/single+cell/single+cell+type				Lymphatic endothelial marker reference
 citation_d117999ad296	Patel et al., EMBO Reports 2024					https://pmc.ncbi.nlm.nih.gov/articles/PMC11358533/				Patel et al., EMBO Reports 2024
 citation_d51d2ee9e0ea	Lemaire 2017 Scientific Reports					https://pmc.ncbi.nlm.nih.gov/articles/PMC5549890/				Lemaire 2017 Scientific Reports
 citation_d6fbc277fd62	Zhao et al. 2025 Front Immunol, single-cell atlas of endothelial cells in atherosclerosis					https://www.frontiersin.org/journals/immunology/articles/10.3389/fimmu.2025.1569988/full				Zhao et al. 2025 Front Immunol, single-cell atlas of endothelial cells in atherosclerosis

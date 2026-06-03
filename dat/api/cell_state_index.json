@@ -1,7 +1,7 @@
 {
-  "curation_version": "2026-05-26",
-  "n_cell_types": 149,
-  "n_states": 598,
+  "curation_version": "2026-06-03",
+  "n_cell_types": 161,
+  "n_states": 649,
   "n_tissues": 10,
   "schema_version": "1.0",
   "tissues": [
@@ -7534,6 +7534,210 @@
           ]
         },
         {
+          "cell_type_id": "cd4_positive_helper_t_cell",
+          "cell_type_label": "Cd4 positive helper t cell",
+          "states": [
+            {
+              "biological_description": "Activated antigen-engaged CD4 T cell markers capture TCR/co-stimulation and early activation programs.",
+              "display_name": "Activated antigen engaged CD4 T cell",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Needs metadata review",
+              "portal_primary_badges": [
+                "Needs metadata review",
+                "Exploratory marker panel"
+              ],
+              "portal_user_summary": "Activated antigen engaged CD4 T cell is a curated marker panel for Cd4 positive helper t cell in Pancreas.",
+              "recommended_portal_label": "Activated antigen engaged CD4 T cell",
+              "release_class": "portal_flagged",
+              "state_class": "process_gradient",
+              "state_establishment_level": "well_established_process",
+              "state_id": "pancreas_cd4_positive_helper_t_cell_activated_antigen_engaged_cd4_t_cell",
+              "state_label": "Activated antigen engaged CD4 T cell"
+            },
+            {
+              "biological_description": "CD4 T cell identity captures canonical helper T cell and TCR-lineage markers.",
+              "display_name": "CD4 T cell identity",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Canonical identity marker panel",
+              "portal_primary_badges": [
+                "Established identity",
+                "Continuous gradient"
+              ],
+              "portal_user_summary": "CD4 T cell identity is a curated identity marker program for Cd4 positive helper t cell.",
+              "recommended_portal_label": "CD4 T cell identity",
+              "release_class": "portal_default",
+              "state_class": "broad_identity_gradient",
+              "state_establishment_level": "canonical_identity",
+              "state_id": "pancreas_cd4_positive_helper_t_cell_cd4_t_cell_identity",
+              "state_label": "CD4 T cell identity"
+            },
+            {
+              "biological_description": "Interferon-response CD4 T cell markers capture antiviral and inflammatory cytokine response activity.",
+              "display_name": "Interferon response CD4 T cell",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Well-established inflammatory process",
+              "portal_primary_badges": [
+                "Well-established process",
+                "Inflammatory response",
+                "Continuous gradient"
+              ],
+              "portal_user_summary": "Interferon / MHC response reflects inflammatory, antiviral, and antigen-presentation activity in the parent cell type.",
+              "recommended_portal_label": "Interferon response CD4 T cell",
+              "release_class": "portal_flagged",
+              "state_class": "process_gradient",
+              "state_establishment_level": "well_established_process",
+              "state_id": "pancreas_cd4_positive_helper_t_cell_interferon_response_cd4_t_cell",
+              "state_label": "Interferon response CD4 T cell"
+            },
+            {
+              "biological_description": "Naive/central-memory CD4 T cell markers capture recirculating, lymphoid-homing helper T cell programs.",
+              "display_name": "Naive central memory CD4 T cell",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Needs metadata review",
+              "portal_primary_badges": [
+                "Needs metadata review",
+                "Exploratory marker panel"
+              ],
+              "portal_user_summary": "Naive central memory CD4 T cell is a curated marker panel for Cd4 positive helper t cell in Pancreas.",
+              "recommended_portal_label": "Naive central memory CD4 T cell",
+              "release_class": "portal_default",
+              "state_class": "broad_identity_gradient",
+              "state_establishment_level": "established_subtype_or_zonation",
+              "state_id": "pancreas_cd4_positive_helper_t_cell_naive_central_memory_cd4_t_cell",
+              "state_label": "Naive central memory CD4 T cell"
+            },
+            {
+              "biological_description": "Tissue-resident-memory-like CD4 T cell markers capture local retention and tissue-adapted memory features.",
+              "display_name": "Tissue resident memory CD4 T cell",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Canonical identity marker panel",
+              "portal_primary_badges": [
+                "Established identity",
+                "Continuous gradient"
+              ],
+              "portal_user_summary": "Tissue resident memory CD4 T cell is a curated identity marker program for Cd4 positive helper t cell.",
+              "recommended_portal_label": "Tissue resident memory CD4 T cell",
+              "release_class": "portal_flagged",
+              "state_class": "process_gradient",
+              "state_establishment_level": "emerging_context_dependent",
+              "state_id": "pancreas_cd4_positive_helper_t_cell_tissue_resident_memory_cd4_t_cell",
+              "state_label": "Tissue resident memory CD4 T cell"
+            }
+          ]
+        },
+        {
+          "cell_type_id": "cd8_positive_alpha_beta_t_cell",
+          "cell_type_label": "Cd8 positive alpha beta t cell",
+          "states": [
+            {
+              "biological_description": "CD8 alpha-beta T cell identity captures TCR-lineage and CD8 co-receptor markers.",
+              "display_name": "CD8 T cell identity",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Canonical identity marker panel",
+              "portal_primary_badges": [
+                "Established identity",
+                "Continuous gradient"
+              ],
+              "portal_user_summary": "CD8 T cell identity is a curated identity marker program for Cd8 positive alpha beta t cell.",
+              "recommended_portal_label": "CD8 T cell identity",
+              "release_class": "portal_default",
+              "state_class": "broad_identity_gradient",
+              "state_establishment_level": "canonical_identity",
+              "state_id": "pancreas_cd8_positive_alpha_beta_t_cell_cd8_t_cell_identity",
+              "state_label": "CD8 T cell identity"
+            },
+            {
+              "biological_description": "Cytotoxic effector CD8 T cell markers capture perforin/granzyme-mediated effector function.",
+              "display_name": "Cytotoxic effector CD8 T cell",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Needs metadata review",
+              "portal_primary_badges": [
+                "Needs metadata review",
+                "Exploratory marker panel"
+              ],
+              "portal_user_summary": "Cytotoxic effector CD8 T cell is a curated marker panel for Cd8 positive alpha beta t cell in Pancreas.",
+              "recommended_portal_label": "Cytotoxic effector CD8 T cell",
+              "release_class": "portal_default",
+              "state_class": "broad_function_gradient",
+              "state_establishment_level": "established_functional_state",
+              "state_id": "pancreas_cd8_positive_alpha_beta_t_cell_cytotoxic_effector_cd8_t_cell",
+              "state_label": "Cytotoxic effector CD8 T cell"
+            },
+            {
+              "biological_description": "Exhausted/dysfunctional CD8 T cell markers capture chronic stimulation and checkpoint-associated programs.",
+              "display_name": "Exhausted dysfunctional CD8 T cell",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Established functional program",
+              "portal_primary_badges": [
+                "Functional program",
+                "Continuous gradient"
+              ],
+              "portal_user_summary": "Exhausted dysfunctional CD8 T cell captures a functional activity program in Cd8 positive alpha beta t cell.",
+              "recommended_portal_label": "Exhausted dysfunctional CD8 T cell",
+              "release_class": "portal_flagged",
+              "state_class": "process_gradient",
+              "state_establishment_level": "emerging_context_dependent",
+              "state_id": "pancreas_cd8_positive_alpha_beta_t_cell_exhausted_dysfunctional_cd8_t_cell",
+              "state_label": "Exhausted dysfunctional CD8 T cell"
+            },
+            {
+              "biological_description": "Interferon-response CD8 T cell markers capture antiviral and inflammatory cytokine response activity.",
+              "display_name": "Interferon response CD8 T cell",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Well-established inflammatory process",
+              "portal_primary_badges": [
+                "Well-established process",
+                "Inflammatory response",
+                "Continuous gradient"
+              ],
+              "portal_user_summary": "Interferon / MHC response reflects inflammatory, antiviral, and antigen-presentation activity in the parent cell type.",
+              "recommended_portal_label": "Interferon response CD8 T cell",
+              "release_class": "portal_flagged",
+              "state_class": "process_gradient",
+              "state_establishment_level": "well_established_process",
+              "state_id": "pancreas_cd8_positive_alpha_beta_t_cell_interferon_response_cd8_t_cell",
+              "state_label": "Interferon response CD8 T cell"
+            },
+            {
+              "biological_description": "Tissue-resident-memory-like CD8 T cell markers capture local retention and tissue-adapted effector-memory features.",
+              "display_name": "Tissue resident memory CD8 T cell",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Canonical identity marker panel",
+              "portal_primary_badges": [
+                "Established identity",
+                "Continuous gradient"
+              ],
+              "portal_user_summary": "Tissue resident memory CD8 T cell is a curated identity marker program for Cd8 positive alpha beta t cell.",
+              "recommended_portal_label": "Tissue resident memory CD8 T cell",
+              "release_class": "portal_flagged",
+              "state_class": "process_gradient",
+              "state_establishment_level": "emerging_context_dependent",
+              "state_id": "pancreas_cd8_positive_alpha_beta_t_cell_tissue_resident_memory_cd8_t_cell",
+              "state_label": "Tissue resident memory CD8 T cell"
+            }
+          ]
+        },
+        {
           "cell_type_id": "cycling_alpha",
           "cell_type_label": "Cycling alpha",
           "states": [
@@ -7910,12 +8114,51 @@
           ]
         },
         {
-          "cell_type_id": "muc5b_ductal",
-          "cell_type_label": "MUC5B+ ductal",
+          "cell_type_id": "intermediate_b_cell",
+          "cell_type_label": "Intermediate b cell",
           "states": [
             {
-              "biological_description": "Ductal epithelial identity represents a curated identity or subtype marker program within MUC5B+ ductal.",
-              "display_name": "Ductal epithelial identity",
+              "biological_description": "Activated intermediate B cell markers capture B cell activation and co-stimulation programs.",
+              "display_name": "Activated intermediate B cell",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Needs metadata review",
+              "portal_primary_badges": [
+                "Needs metadata review",
+                "Exploratory marker panel"
+              ],
+              "portal_user_summary": "Activated intermediate B cell is a curated marker panel for Intermediate b cell in Pancreas.",
+              "recommended_portal_label": "Activated intermediate B cell",
+              "release_class": "portal_flagged",
+              "state_class": "process_gradient",
+              "state_establishment_level": "well_established_process",
+              "state_id": "pancreas_intermediate_b_cell_activated_intermediate_b_cell",
+              "state_label": "Activated intermediate B cell"
+            },
+            {
+              "biological_description": "Interferon-response intermediate B cell markers capture antiviral and inflammatory cytokine response activity.",
+              "display_name": "Interferon response intermediate B cell",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Well-established inflammatory process",
+              "portal_primary_badges": [
+                "Well-established process",
+                "Inflammatory response",
+                "Continuous gradient"
+              ],
+              "portal_user_summary": "Interferon / MHC response reflects inflammatory, antiviral, and antigen-presentation activity in the parent cell type.",
+              "recommended_portal_label": "Interferon response intermediate B cell",
+              "release_class": "portal_flagged",
+              "state_class": "process_gradient",
+              "state_establishment_level": "well_established_process",
+              "state_id": "pancreas_intermediate_b_cell_interferon_response_intermediate_b_cell",
+              "state_label": "Interferon response intermediate B cell"
+            },
+            {
+              "biological_description": "Intermediate B cell identity captures B lineage markers with mixed naive/memory-like B cell features.",
+              "display_name": "Intermediate B cell identity",
               "interpretation_status": "continuous_gradient",
               "manual_review_status": "reviewed",
               "n_markers": 10,
@@ -7924,17 +8167,42 @@
                 "Established identity",
                 "Continuous gradient"
               ],
-              "portal_user_summary": "Ductal epithelial identity is a curated identity marker program for MUC5B+ ductal.",
-              "recommended_portal_label": "Ductal epithelial identity",
+              "portal_user_summary": "Intermediate B cell identity is a curated identity marker program for Intermediate b cell.",
+              "recommended_portal_label": "Intermediate B cell identity",
               "release_class": "portal_default",
               "state_class": "broad_identity_gradient",
               "state_establishment_level": "canonical_identity",
-              "state_id": "pancreas_muc5b_positive_ductal_ductal_epithelial_identity",
-              "state_label": "Ductal epithelial identity"
+              "state_id": "pancreas_intermediate_b_cell_intermediate_b_cell_identity",
+              "state_label": "Intermediate B cell identity"
             },
             {
-              "biological_description": "Inflammatory ductal represents inflammatory activation in MUC5B+ ductal.",
-              "display_name": "Inflammatory ductal",
+              "biological_description": "Transitional intermediate B cell markers capture immature/transitional B cell features.",
+              "display_name": "Transitional intermediate B cell",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Needs metadata review",
+              "portal_primary_badges": [
+                "Needs metadata review",
+                "Exploratory marker panel"
+              ],
+              "portal_user_summary": "Transitional intermediate B cell is a curated marker panel for Intermediate b cell in Pancreas.",
+              "recommended_portal_label": "Transitional intermediate B cell",
+              "release_class": "portal_default",
+              "state_class": "process_gradient",
+              "state_establishment_level": "established_subtype_or_zonation",
+              "state_id": "pancreas_intermediate_b_cell_transitional_intermediate_b_cell",
+              "state_label": "Transitional intermediate B cell"
+            }
+          ]
+        },
+        {
+          "cell_type_id": "lymph_node_lymphatic_vessel_endothelial_cell",
+          "cell_type_label": "Lymph node lymphatic vessel endothelial cell",
+          "states": [
+            {
+              "biological_description": "Inflammatory lymphatic endothelial markers capture endothelial activation, adhesion, chemokine, and MHC programs.",
+              "display_name": "Inflammatory lymphatic endothelial",
               "interpretation_status": "continuous_gradient",
               "manual_review_status": "reviewed",
               "n_markers": 10,
@@ -7943,32 +8211,51 @@
                 "Inflammatory process",
                 "Context dependent"
               ],
-              "portal_user_summary": "Inflammatory ductal reflects inflammatory activation in MUC5B+ ductal.",
-              "recommended_portal_label": "Inflammatory ductal",
+              "portal_user_summary": "Inflammatory lymphatic endothelial reflects inflammatory activation in Lymph node lymphatic vessel endothelial cell.",
+              "recommended_portal_label": "Inflammatory lymphatic endothelial",
               "release_class": "portal_flagged",
               "state_class": "process_gradient",
               "state_establishment_level": "well_established_process",
-              "state_id": "pancreas_muc5b_positive_ductal_inflammatory_ductal",
-              "state_label": "Inflammatory ductal"
+              "state_id": "pancreas_lymph_node_lymphatic_vessel_endothelial_cell_inflammatory_lymphatic_endothelial",
+              "state_label": "Inflammatory lymphatic endothelial"
             },
             {
-              "biological_description": "Mucinous secretory ductal captures a functional activity program in MUC5B+ ductal.",
-              "display_name": "Mucinous secretory ductal",
+              "biological_description": "Lymph-node chemokine lymphatic endothelial markers capture lymphocyte/dendritic-cell trafficking and lymphatic stromal guidance programs.",
+              "display_name": "Lymph node chemokine lymphatic endothelial",
               "interpretation_status": "continuous_gradient",
               "manual_review_status": "reviewed",
               "n_markers": 10,
-              "portal_display_establishment": "Established functional program",
+              "portal_display_establishment": "Inflammatory process",
               "portal_primary_badges": [
-                "Functional program",
+                "Inflammatory process",
+                "Context dependent"
+              ],
+              "portal_user_summary": "Lymph node chemokine lymphatic endothelial reflects inflammatory activation in Lymph node lymphatic vessel endothelial cell.",
+              "recommended_portal_label": "Lymph node chemokine lymphatic endothelial",
+              "release_class": "portal_default",
+              "state_class": "process_gradient",
+              "state_establishment_level": "established_functional_state",
+              "state_id": "pancreas_lymph_node_lymphatic_vessel_endothelial_cell_lymph_node_chemokine_lymphatic_endothelial",
+              "state_label": "Lymph node chemokine lymphatic endothelial"
+            },
+            {
+              "biological_description": "Lymphatic endothelial identity captures PROX1/PDPN/LYVE1/FLT4-associated lymphatic endothelial markers.",
+              "display_name": "Lymphatic endothelial identity",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Canonical identity marker panel",
+              "portal_primary_badges": [
+                "Established identity",
                 "Continuous gradient"
               ],
-              "portal_user_summary": "Mucinous secretory ductal captures a functional activity program in MUC5B+ ductal.",
-              "recommended_portal_label": "Mucinous secretory ductal",
+              "portal_user_summary": "Lymphatic endothelial identity is a curated identity marker program for Lymph node lymphatic vessel endothelial cell.",
+              "recommended_portal_label": "Lymphatic endothelial identity",
               "release_class": "portal_default",
-              "state_class": "broad_function_gradient",
-              "state_establishment_level": "established_functional_state",
-              "state_id": "pancreas_muc5b_positive_ductal_mucinous_secretory_ductal",
-              "state_label": "Mucinous secretory ductal"
+              "state_class": "broad_identity_gradient",
+              "state_establishment_level": "canonical_identity",
+              "state_id": "pancreas_lymph_node_lymphatic_vessel_endothelial_cell_lymphatic_endothelial_identity",
+              "state_label": "Lymphatic endothelial identity"
             }
           ]
         },
@@ -8052,6 +8339,524 @@
               "state_establishment_level": "canonical_identity",
               "state_id": "pancreas_macrophage_resident_complement_macrophage",
               "state_label": "Resident complement macrophage"
+            }
+          ]
+        },
+        {
+          "cell_type_id": "mast_cell",
+          "cell_type_label": "Mast cell",
+          "states": [
+            {
+              "biological_description": "Activated/degranulation-like mast cell markers capture Fc receptor signaling, granule, and immediate early activation programs.",
+              "display_name": "Activated degranulation mast cell",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Needs metadata review",
+              "portal_primary_badges": [
+                "Needs metadata review",
+                "Exploratory marker panel"
+              ],
+              "portal_user_summary": "Activated degranulation mast cell is a curated marker panel for Mast cell in Pancreas.",
+              "recommended_portal_label": "Activated degranulation mast cell",
+              "release_class": "portal_flagged",
+              "state_class": "process_gradient",
+              "state_establishment_level": "established_functional_state",
+              "state_id": "pancreas_mast_cell_activated_degranulation_mast_cell",
+              "state_label": "Activated degranulation mast cell"
+            },
+            {
+              "biological_description": "Inflammatory cytokine mast cell markers capture cytokine/chemokine response programs.",
+              "display_name": "Inflammatory cytokine mast cell",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Inflammatory process",
+              "portal_primary_badges": [
+                "Inflammatory process",
+                "Context dependent"
+              ],
+              "portal_user_summary": "Inflammatory cytokine mast cell reflects inflammatory activation in Mast cell.",
+              "recommended_portal_label": "Inflammatory cytokine mast cell",
+              "release_class": "portal_flagged",
+              "state_class": "process_gradient",
+              "state_establishment_level": "emerging_context_dependent",
+              "state_id": "pancreas_mast_cell_inflammatory_cytokine_mast_cell",
+              "state_label": "Inflammatory cytokine mast cell"
+            },
+            {
+              "biological_description": "Interferon-response mast cell markers capture antiviral and inflammatory cytokine response activity.",
+              "display_name": "Interferon response mast cell",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Well-established inflammatory process",
+              "portal_primary_badges": [
+                "Well-established process",
+                "Inflammatory response",
+                "Continuous gradient"
+              ],
+              "portal_user_summary": "Interferon / MHC response reflects inflammatory, antiviral, and antigen-presentation activity in the parent cell type.",
+              "recommended_portal_label": "Interferon response mast cell",
+              "release_class": "portal_flagged",
+              "state_class": "process_gradient",
+              "state_establishment_level": "well_established_process",
+              "state_id": "pancreas_mast_cell_interferon_response_mast_cell",
+              "state_label": "Interferon response mast cell"
+            },
+            {
+              "biological_description": "Mast cell identity captures tryptase/chymase, KIT, Fc receptor, histamine, and prostaglandin pathway markers.",
+              "display_name": "Mast cell identity",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Canonical identity marker panel",
+              "portal_primary_badges": [
+                "Established identity",
+                "Continuous gradient"
+              ],
+              "portal_user_summary": "Mast cell identity is a curated identity marker program for Mast cell.",
+              "recommended_portal_label": "Mast cell identity",
+              "release_class": "portal_default",
+              "state_class": "broad_identity_gradient",
+              "state_establishment_level": "canonical_identity",
+              "state_id": "pancreas_mast_cell_mast_cell_identity",
+              "state_label": "Mast cell identity"
+            }
+          ]
+        },
+        {
+          "cell_type_id": "memory_b_cell",
+          "cell_type_label": "Memory b cell",
+          "states": [
+            {
+              "biological_description": "Antigen-presenting memory B cell markers capture MHC class II and co-stimulatory antigen-presentation programs.",
+              "display_name": "Antigen presenting memory B cell",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Well-established inflammatory process",
+              "portal_primary_badges": [
+                "Well-established process",
+                "Inflammatory response",
+                "Continuous gradient"
+              ],
+              "portal_user_summary": "Interferon / MHC response reflects inflammatory, antiviral, and antigen-presentation activity in the parent cell type.",
+              "recommended_portal_label": "Antigen presenting memory B cell",
+              "release_class": "portal_default",
+              "state_class": "process_gradient",
+              "state_establishment_level": "well_established_process",
+              "state_id": "pancreas_memory_b_cell_antigen_presenting_memory_b_cell",
+              "state_label": "Antigen presenting memory B cell"
+            },
+            {
+              "biological_description": "Class-switched memory B cell markers capture antigen-experienced IgG/IgA and atypical memory-like programs.",
+              "display_name": "Class switched memory B cell",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Needs metadata review",
+              "portal_primary_badges": [
+                "Needs metadata review",
+                "Exploratory marker panel"
+              ],
+              "portal_user_summary": "Class switched memory B cell is a curated marker panel for Memory b cell in Pancreas.",
+              "recommended_portal_label": "Class switched memory B cell",
+              "release_class": "portal_default",
+              "state_class": "process_gradient",
+              "state_establishment_level": "established_subtype_or_zonation",
+              "state_id": "pancreas_memory_b_cell_class_switched_memory_b_cell",
+              "state_label": "Class switched memory B cell"
+            },
+            {
+              "biological_description": "Interferon-response memory B cell markers capture antiviral and inflammatory cytokine response activity.",
+              "display_name": "Interferon response memory B cell",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Well-established inflammatory process",
+              "portal_primary_badges": [
+                "Well-established process",
+                "Inflammatory response",
+                "Continuous gradient"
+              ],
+              "portal_user_summary": "Interferon / MHC response reflects inflammatory, antiviral, and antigen-presentation activity in the parent cell type.",
+              "recommended_portal_label": "Interferon response memory B cell",
+              "release_class": "portal_flagged",
+              "state_class": "process_gradient",
+              "state_establishment_level": "well_established_process",
+              "state_id": "pancreas_memory_b_cell_interferon_response_memory_b_cell",
+              "state_label": "Interferon response memory B cell"
+            },
+            {
+              "biological_description": "Memory B cell identity captures BCR/CD20 with CD27/TACI/FCRL-associated memory B cell features.",
+              "display_name": "Memory B cell identity",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Canonical identity marker panel",
+              "portal_primary_badges": [
+                "Established identity",
+                "Continuous gradient"
+              ],
+              "portal_user_summary": "Memory B cell identity is a curated identity marker program for Memory b cell.",
+              "recommended_portal_label": "Memory B cell identity",
+              "release_class": "portal_default",
+              "state_class": "broad_identity_gradient",
+              "state_establishment_level": "canonical_identity",
+              "state_id": "pancreas_memory_b_cell_memory_b_cell_identity",
+              "state_label": "Memory B cell identity"
+            }
+          ]
+        },
+        {
+          "cell_type_id": "monocyte",
+          "cell_type_label": "Monocyte",
+          "states": [
+            {
+              "biological_description": "Antigen-presenting monocyte markers capture MHC class II and co-stimulatory antigen-presentation programs.",
+              "display_name": "Antigen presenting monocyte",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Well-established inflammatory process",
+              "portal_primary_badges": [
+                "Well-established process",
+                "Inflammatory response",
+                "Continuous gradient"
+              ],
+              "portal_user_summary": "Interferon / MHC response reflects inflammatory, antiviral, and antigen-presentation activity in the parent cell type.",
+              "recommended_portal_label": "Antigen presenting monocyte",
+              "release_class": "portal_default",
+              "state_class": "process_gradient",
+              "state_establishment_level": "well_established_process",
+              "state_id": "pancreas_monocyte_antigen_presenting_monocyte",
+              "state_label": "Antigen presenting monocyte"
+            },
+            {
+              "biological_description": "Classical monocyte markers capture CD14+ inflammatory/myeloid circulating monocyte identity.",
+              "display_name": "Classical monocyte",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Needs metadata review",
+              "portal_primary_badges": [
+                "Needs metadata review",
+                "Exploratory marker panel"
+              ],
+              "portal_user_summary": "Classical monocyte is a curated marker panel for Monocyte in Pancreas.",
+              "recommended_portal_label": "Classical monocyte",
+              "release_class": "portal_default",
+              "state_class": "broad_identity_gradient",
+              "state_establishment_level": "canonical_identity",
+              "state_id": "pancreas_monocyte_classical_monocyte",
+              "state_label": "Classical monocyte"
+            },
+            {
+              "biological_description": "Inflammatory chemokine monocyte markers capture cytokine, chemokine, and NF-kB activation programs.",
+              "display_name": "Inflammatory chemokine monocyte",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Inflammatory process",
+              "portal_primary_badges": [
+                "Inflammatory process",
+                "Context dependent"
+              ],
+              "portal_user_summary": "Inflammatory chemokine monocyte reflects inflammatory activation in Monocyte.",
+              "recommended_portal_label": "Inflammatory chemokine monocyte",
+              "release_class": "portal_flagged",
+              "state_class": "process_gradient",
+              "state_establishment_level": "well_established_process",
+              "state_id": "pancreas_monocyte_inflammatory_chemokine_monocyte",
+              "state_label": "Inflammatory chemokine monocyte"
+            },
+            {
+              "biological_description": "Interferon-response monocyte markers capture antiviral and inflammatory cytokine response activity.",
+              "display_name": "Interferon response monocyte",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Well-established inflammatory process",
+              "portal_primary_badges": [
+                "Well-established process",
+                "Inflammatory response",
+                "Continuous gradient"
+              ],
+              "portal_user_summary": "Interferon / MHC response reflects inflammatory, antiviral, and antigen-presentation activity in the parent cell type.",
+              "recommended_portal_label": "Interferon response monocyte",
+              "release_class": "portal_flagged",
+              "state_class": "process_gradient",
+              "state_establishment_level": "well_established_process",
+              "state_id": "pancreas_monocyte_interferon_response_monocyte",
+              "state_label": "Interferon response monocyte"
+            },
+            {
+              "biological_description": "Nonclassical monocyte markers capture FCGR3A/CX3CR1-associated patrolling monocyte features.",
+              "display_name": "Nonclassical monocyte",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Needs metadata review",
+              "portal_primary_badges": [
+                "Needs metadata review",
+                "Exploratory marker panel"
+              ],
+              "portal_user_summary": "Nonclassical monocyte is a curated marker panel for Monocyte in Pancreas.",
+              "recommended_portal_label": "Nonclassical monocyte",
+              "release_class": "portal_default",
+              "state_class": "broad_identity_gradient",
+              "state_establishment_level": "established_subtype_or_zonation",
+              "state_id": "pancreas_monocyte_nonclassical_monocyte",
+              "state_label": "Nonclassical monocyte"
+            }
+          ]
+        },
+        {
+          "cell_type_id": "muc5b_ductal",
+          "cell_type_label": "Muc5b ductal",
+          "states": [
+            {
+              "biological_description": "Ductal epithelial identity represents a curated identity or subtype marker program within MUC5B+ ductal.",
+              "display_name": "Ductal epithelial identity",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Canonical identity marker panel",
+              "portal_primary_badges": [
+                "Established identity",
+                "Continuous gradient"
+              ],
+              "portal_user_summary": "Ductal epithelial identity is a curated identity marker program for MUC5B+ ductal.",
+              "recommended_portal_label": "Ductal epithelial identity",
+              "release_class": "portal_default",
+              "state_class": "broad_identity_gradient",
+              "state_establishment_level": "canonical_identity",
+              "state_id": "pancreas_muc5b_positive_ductal_ductal_epithelial_identity",
+              "state_label": "Ductal epithelial identity"
+            },
+            {
+              "biological_description": "Inflammatory ductal represents inflammatory activation in MUC5B+ ductal.",
+              "display_name": "Inflammatory ductal",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Inflammatory process",
+              "portal_primary_badges": [
+                "Inflammatory process",
+                "Context dependent"
+              ],
+              "portal_user_summary": "Inflammatory ductal reflects inflammatory activation in MUC5B+ ductal.",
+              "recommended_portal_label": "Inflammatory ductal",
+              "release_class": "portal_flagged",
+              "state_class": "process_gradient",
+              "state_establishment_level": "well_established_process",
+              "state_id": "pancreas_muc5b_positive_ductal_inflammatory_ductal",
+              "state_label": "Inflammatory ductal"
+            },
+            {
+              "biological_description": "Mucinous secretory ductal captures a functional activity program in MUC5B+ ductal.",
+              "display_name": "Mucinous secretory ductal",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Established functional program",
+              "portal_primary_badges": [
+                "Functional program",
+                "Continuous gradient"
+              ],
+              "portal_user_summary": "Mucinous secretory ductal captures a functional activity program in MUC5B+ ductal.",
+              "recommended_portal_label": "Mucinous secretory ductal",
+              "release_class": "portal_default",
+              "state_class": "broad_function_gradient",
+              "state_establishment_level": "established_functional_state",
+              "state_id": "pancreas_muc5b_positive_ductal_mucinous_secretory_ductal",
+              "state_label": "Mucinous secretory ductal"
+            }
+          ]
+        },
+        {
+          "cell_type_id": "naive_b_cell",
+          "cell_type_label": "Naive b cell",
+          "states": [
+            {
+              "biological_description": "Activated naive B cell markers capture BCR/TLR/co-stimulatory activation programs.",
+              "display_name": "Activated naive B cell",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Needs metadata review",
+              "portal_primary_badges": [
+                "Needs metadata review",
+                "Exploratory marker panel"
+              ],
+              "portal_user_summary": "Activated naive B cell is a curated marker panel for Naive b cell in Pancreas.",
+              "recommended_portal_label": "Activated naive B cell",
+              "release_class": "portal_flagged",
+              "state_class": "process_gradient",
+              "state_establishment_level": "well_established_process",
+              "state_id": "pancreas_naive_b_cell_activated_naive_b_cell",
+              "state_label": "Activated naive B cell"
+            },
+            {
+              "biological_description": "Interferon-response naive B cell markers capture antiviral and inflammatory cytokine response activity.",
+              "display_name": "Interferon response naive B cell",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Well-established inflammatory process",
+              "portal_primary_badges": [
+                "Well-established process",
+                "Inflammatory response",
+                "Continuous gradient"
+              ],
+              "portal_user_summary": "Interferon / MHC response reflects inflammatory, antiviral, and antigen-presentation activity in the parent cell type.",
+              "recommended_portal_label": "Interferon response naive B cell",
+              "release_class": "portal_flagged",
+              "state_class": "process_gradient",
+              "state_establishment_level": "well_established_process",
+              "state_id": "pancreas_naive_b_cell_interferon_response_naive_b_cell",
+              "state_label": "Interferon response naive B cell"
+            },
+            {
+              "biological_description": "Naive B cell identity captures canonical BCR, CD20, IgD, and naive B lineage markers.",
+              "display_name": "Naive B cell identity",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Canonical identity marker panel",
+              "portal_primary_badges": [
+                "Established identity",
+                "Continuous gradient"
+              ],
+              "portal_user_summary": "Naive B cell identity is a curated identity marker program for Naive b cell.",
+              "recommended_portal_label": "Naive B cell identity",
+              "release_class": "portal_default",
+              "state_class": "broad_identity_gradient",
+              "state_establishment_level": "canonical_identity",
+              "state_id": "pancreas_naive_b_cell_naive_b_cell_identity",
+              "state_label": "Naive B cell identity"
+            },
+            {
+              "biological_description": "Transitional/immature-like naive B cell markers capture recently matured or transitional B cell programs.",
+              "display_name": "Transitional naive B cell",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Needs metadata review",
+              "portal_primary_badges": [
+                "Needs metadata review",
+                "Exploratory marker panel"
+              ],
+              "portal_user_summary": "Transitional naive B cell is a curated marker panel for Naive b cell in Pancreas.",
+              "recommended_portal_label": "Transitional naive B cell",
+              "release_class": "portal_default",
+              "state_class": "process_gradient",
+              "state_establishment_level": "established_subtype_or_zonation",
+              "state_id": "pancreas_naive_b_cell_transitional_naive_b_cell",
+              "state_label": "Transitional naive B cell"
+            }
+          ]
+        },
+        {
+          "cell_type_id": "nk_cell",
+          "cell_type_label": "Nk cell",
+          "states": [
+            {
+              "biological_description": "Cytokine-activated NK cell markers capture inflammatory and effector cytokine response activity.",
+              "display_name": "Cytokine activated NK cell",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Needs metadata review",
+              "portal_primary_badges": [
+                "Needs metadata review",
+                "Exploratory marker panel"
+              ],
+              "portal_user_summary": "Cytokine activated NK cell is a curated marker panel for Nk cell in Pancreas.",
+              "recommended_portal_label": "Cytokine activated NK cell",
+              "release_class": "portal_flagged",
+              "state_class": "process_gradient",
+              "state_establishment_level": "well_established_process",
+              "state_id": "pancreas_nk_cell_cytokine_activated_nk_cell",
+              "state_label": "Cytokine activated NK cell"
+            },
+            {
+              "biological_description": "Cytotoxic NK cell markers capture granule-mediated effector activity.",
+              "display_name": "Cytotoxic NK cell",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Needs metadata review",
+              "portal_primary_badges": [
+                "Needs metadata review",
+                "Exploratory marker panel"
+              ],
+              "portal_user_summary": "Cytotoxic NK cell is a curated marker panel for Nk cell in Pancreas.",
+              "recommended_portal_label": "Cytotoxic NK cell",
+              "release_class": "portal_default",
+              "state_class": "broad_function_gradient",
+              "state_establishment_level": "established_functional_state",
+              "state_id": "pancreas_nk_cell_cytotoxic_nk_cell",
+              "state_label": "Cytotoxic NK cell"
+            },
+            {
+              "biological_description": "Interferon-response NK cell markers capture antiviral and inflammatory cytokine response activity.",
+              "display_name": "Interferon response NK cell",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Well-established inflammatory process",
+              "portal_primary_badges": [
+                "Well-established process",
+                "Inflammatory response",
+                "Continuous gradient"
+              ],
+              "portal_user_summary": "Interferon / MHC response reflects inflammatory, antiviral, and antigen-presentation activity in the parent cell type.",
+              "recommended_portal_label": "Interferon response NK cell",
+              "release_class": "portal_flagged",
+              "state_class": "process_gradient",
+              "state_establishment_level": "well_established_process",
+              "state_id": "pancreas_nk_cell_interferon_response_nk_cell",
+              "state_label": "Interferon response NK cell"
+            },
+            {
+              "biological_description": "NK cell identity captures canonical natural killer cell cytotoxic and receptor markers.",
+              "display_name": "NK cell identity",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Canonical identity marker panel",
+              "portal_primary_badges": [
+                "Established identity",
+                "Continuous gradient"
+              ],
+              "portal_user_summary": "NK cell identity is a curated identity marker program for Nk cell.",
+              "recommended_portal_label": "NK cell identity",
+              "release_class": "portal_default",
+              "state_class": "broad_identity_gradient",
+              "state_establishment_level": "canonical_identity",
+              "state_id": "pancreas_nk_cell_nk_cell_identity",
+              "state_label": "NK cell identity"
+            },
+            {
+              "biological_description": "Proliferating NK cell markers capture cycling NK cells.",
+              "display_name": "Proliferating NK cell",
+              "interpretation_status": "continuous_or_hard_callable_if_separable",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Well-established cell-cycle process",
+              "portal_primary_badges": [
+                "Cell-cycle process",
+                "Potentially hard-callable if separable"
+              ],
+              "portal_user_summary": "Proliferation / cell cycle captures cycling cells using canonical S/G2M and mitotic markers.",
+              "recommended_portal_label": "Proliferating NK cell",
+              "release_class": "portal_default",
+              "state_class": "rare_process",
+              "state_establishment_level": "well_established_process",
+              "state_id": "pancreas_nk_cell_proliferating_nk_cell",
+              "state_label": "Proliferating NK cell"
             }
           ]
         },
@@ -8159,6 +8964,254 @@
               "state_establishment_level": "established_functional_state",
               "state_id": "pancreas_pancreatic_quiescent_stellate_retinoid_lipid_storage",
               "state_label": "Retinoid lipid storage"
+            }
+          ]
+        },
+        {
+          "cell_type_id": "plasmablast",
+          "cell_type_label": "Plasmablast",
+          "states": [
+            {
+              "biological_description": "Immunoglobulin-high plasmablast markers capture antibody transcript abundance and secretion load.",
+              "display_name": "Immunoglobulin high plasmablast",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Needs metadata review",
+              "portal_primary_badges": [
+                "Needs metadata review",
+                "Exploratory marker panel"
+              ],
+              "portal_user_summary": "Immunoglobulin high plasmablast is a curated marker panel for Plasmablast in Pancreas.",
+              "recommended_portal_label": "Immunoglobulin high plasmablast",
+              "release_class": "portal_default",
+              "state_class": "broad_function_gradient",
+              "state_establishment_level": "established_functional_state",
+              "state_id": "pancreas_plasmablast_immunoglobulin_high_plasmablast",
+              "state_label": "Immunoglobulin high plasmablast"
+            },
+            {
+              "biological_description": "Interferon-response plasmablast markers capture antiviral and inflammatory cytokine response activity.",
+              "display_name": "Interferon response plasmablast",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Well-established inflammatory process",
+              "portal_primary_badges": [
+                "Well-established process",
+                "Inflammatory response",
+                "Continuous gradient"
+              ],
+              "portal_user_summary": "Interferon / MHC response reflects inflammatory, antiviral, and antigen-presentation activity in the parent cell type.",
+              "recommended_portal_label": "Interferon response plasmablast",
+              "release_class": "portal_flagged",
+              "state_class": "process_gradient",
+              "state_establishment_level": "well_established_process",
+              "state_id": "pancreas_plasmablast_interferon_response_plasmablast",
+              "state_label": "Interferon response plasmablast"
+            },
+            {
+              "biological_description": "Plasmablast identity captures antibody-secreting plasma-cell differentiation and secretory machinery.",
+              "display_name": "Plasmablast antibody secretion identity",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Canonical identity marker panel",
+              "portal_primary_badges": [
+                "Established identity",
+                "Continuous gradient"
+              ],
+              "portal_user_summary": "Plasmablast antibody secretion identity is a curated identity marker program for Plasmablast.",
+              "recommended_portal_label": "Plasmablast antibody secretion identity",
+              "release_class": "portal_default",
+              "state_class": "broad_identity_gradient",
+              "state_establishment_level": "canonical_identity",
+              "state_id": "pancreas_plasmablast_plasmablast_antibody_secretion_identity",
+              "state_label": "Plasmablast antibody secretion identity"
+            },
+            {
+              "biological_description": "Proliferating plasmablast markers capture cycling antibody-secreting cells.",
+              "display_name": "Proliferating plasmablast",
+              "interpretation_status": "continuous_or_hard_callable_if_separable",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Well-established cell-cycle process",
+              "portal_primary_badges": [
+                "Cell-cycle process",
+                "Potentially hard-callable if separable"
+              ],
+              "portal_user_summary": "Proliferation / cell cycle captures cycling cells using canonical S/G2M and mitotic markers.",
+              "recommended_portal_label": "Proliferating plasmablast",
+              "release_class": "portal_default",
+              "state_class": "rare_process",
+              "state_establishment_level": "well_established_process",
+              "state_id": "pancreas_plasmablast_proliferating_plasmablast",
+              "state_label": "Proliferating plasmablast"
+            }
+          ]
+        },
+        {
+          "cell_type_id": "regulatory_t_cell",
+          "cell_type_label": "Regulatory t cell",
+          "states": [
+            {
+              "biological_description": "Activated/suppressive Treg markers capture co-stimulatory, suppressive, and tissue-activated regulatory programs.",
+              "display_name": "Activated suppressive Treg",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Needs metadata review",
+              "portal_primary_badges": [
+                "Needs metadata review",
+                "Exploratory marker panel"
+              ],
+              "portal_user_summary": "Activated suppressive Treg is a curated marker panel for Regulatory t cell in Pancreas.",
+              "recommended_portal_label": "Activated suppressive Treg",
+              "release_class": "portal_flagged",
+              "state_class": "process_gradient",
+              "state_establishment_level": "established_functional_state",
+              "state_id": "pancreas_regulatory_t_cell_activated_suppressive_treg",
+              "state_label": "Activated suppressive Treg"
+            },
+            {
+              "biological_description": "Interferon-response Treg markers capture inflammatory cytokine response activity within Tregs.",
+              "display_name": "Interferon response Treg",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Well-established inflammatory process",
+              "portal_primary_badges": [
+                "Well-established process",
+                "Inflammatory response",
+                "Continuous gradient"
+              ],
+              "portal_user_summary": "Interferon / MHC response reflects inflammatory, antiviral, and antigen-presentation activity in the parent cell type.",
+              "recommended_portal_label": "Interferon response Treg",
+              "release_class": "portal_flagged",
+              "state_class": "process_gradient",
+              "state_establishment_level": "well_established_process",
+              "state_id": "pancreas_regulatory_t_cell_interferon_response_treg",
+              "state_label": "Interferon response Treg"
+            },
+            {
+              "biological_description": "Proliferating Treg markers capture cycling regulatory T cells.",
+              "display_name": "Proliferating Treg",
+              "interpretation_status": "continuous_or_hard_callable_if_separable",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Well-established cell-cycle process",
+              "portal_primary_badges": [
+                "Cell-cycle process",
+                "Potentially hard-callable if separable"
+              ],
+              "portal_user_summary": "Proliferation / cell cycle captures cycling cells using canonical S/G2M and mitotic markers.",
+              "recommended_portal_label": "Proliferating Treg",
+              "release_class": "portal_default",
+              "state_class": "rare_process",
+              "state_establishment_level": "well_established_process",
+              "state_id": "pancreas_regulatory_t_cell_proliferating_treg",
+              "state_label": "Proliferating Treg"
+            },
+            {
+              "biological_description": "Regulatory T cell identity captures canonical FOXP3/CD25/CTLA4-associated suppressive T cell markers.",
+              "display_name": "Regulatory T cell identity",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Canonical identity marker panel",
+              "portal_primary_badges": [
+                "Established identity",
+                "Continuous gradient"
+              ],
+              "portal_user_summary": "Regulatory T cell identity is a curated identity marker program for Regulatory t cell.",
+              "recommended_portal_label": "Regulatory T cell identity",
+              "release_class": "portal_default",
+              "state_class": "broad_identity_gradient",
+              "state_establishment_level": "canonical_identity",
+              "state_id": "pancreas_regulatory_t_cell_regulatory_t_cell_identity",
+              "state_label": "Regulatory T cell identity"
+            }
+          ]
+        },
+        {
+          "cell_type_id": "schwann_cell",
+          "cell_type_label": "Schwann cell",
+          "states": [
+            {
+              "biological_description": "Inflammatory/stress Schwann cell markers capture cytokine, NF-kB, immediate early, and injury-response activity.",
+              "display_name": "Inflammatory stress Schwann cell",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Inflammatory process",
+              "portal_primary_badges": [
+                "Inflammatory process",
+                "Context dependent"
+              ],
+              "portal_user_summary": "Inflammatory stress Schwann cell reflects inflammatory activation in Schwann cell.",
+              "recommended_portal_label": "Inflammatory stress Schwann cell",
+              "release_class": "portal_flagged",
+              "state_class": "process_gradient",
+              "state_establishment_level": "well_established_process",
+              "state_id": "pancreas_schwann_cell_inflammatory_stress_schwann_cell",
+              "state_label": "Inflammatory stress Schwann cell"
+            },
+            {
+              "biological_description": "Myelinating Schwann cell identity captures peripheral glial and myelin-associated Schwann cell markers.",
+              "display_name": "Myelinating Schwann cell identity",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Canonical identity marker panel",
+              "portal_primary_badges": [
+                "Established identity",
+                "Continuous gradient"
+              ],
+              "portal_user_summary": "Myelinating Schwann cell identity is a curated identity marker program for Schwann cell.",
+              "recommended_portal_label": "Myelinating Schwann cell identity",
+              "release_class": "portal_default",
+              "state_class": "broad_identity_gradient",
+              "state_establishment_level": "canonical_identity",
+              "state_id": "pancreas_schwann_cell_myelinating_schwann_cell_identity",
+              "state_label": "Myelinating Schwann cell identity"
+            },
+            {
+              "biological_description": "Nonmyelinating/repair Schwann cell markers capture injury-response, trophic, and nonmyelinating glial features.",
+              "display_name": "Nonmyelinating repair Schwann cell",
+              "interpretation_status": "continuous_gradient",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Needs metadata review",
+              "portal_primary_badges": [
+                "Needs metadata review",
+                "Exploratory marker panel"
+              ],
+              "portal_user_summary": "Nonmyelinating repair Schwann cell is a curated marker panel for Schwann cell in Pancreas.",
+              "recommended_portal_label": "Nonmyelinating repair Schwann cell",
+              "release_class": "portal_flagged",
+              "state_class": "process_gradient",
+              "state_establishment_level": "emerging_context_dependent",
+              "state_id": "pancreas_schwann_cell_nonmyelinating_repair_schwann_cell",
+              "state_label": "Nonmyelinating repair Schwann cell"
+            },
+            {
+              "biological_description": "Proliferating Schwann cell markers capture cycling Schwann cells.",
+              "display_name": "Proliferating Schwann cell",
+              "interpretation_status": "continuous_or_hard_callable_if_separable",
+              "manual_review_status": "reviewed",
+              "n_markers": 10,
+              "portal_display_establishment": "Well-established cell-cycle process",
+              "portal_primary_badges": [
+                "Cell-cycle process",
+                "Potentially hard-callable if separable"
+              ],
+              "portal_user_summary": "Proliferation / cell cycle captures cycling cells using canonical S/G2M and mitotic markers.",
+              "recommended_portal_label": "Proliferating Schwann cell",
+              "release_class": "portal_default",
+              "state_class": "rare_process",
+              "state_establishment_level": "well_established_process",
+              "state_id": "pancreas_schwann_cell_proliferating_schwann_cell",
+              "state_label": "Proliferating Schwann cell"
             }
           ]
         }
