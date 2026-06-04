@@ -331,10 +331,8 @@ def apply_portal_metadata_rules(state: "StateRecord", rules: dict[str, Any], ove
     if not state.state_establishment_level:
         state.state_establishment_level = "needs_review"
         state.provenance_warnings.append("state_establishment_level_inferred")
-    if not state.quality_badges:
-        state.quality_badges = ["Curated marker panel"]
-    if not state.portal_primary_badges:
-        state.portal_primary_badges = list(state.quality_badges)
+    state.quality_badges = ["AI curated cell state"]
+    state.portal_primary_badges = ["AI curated cell state"]
     if not state.portal_user_summary:
         state.portal_user_summary = f"{state.state_label} is a curated marker panel for {state.cell_type_label} in {state.tissue_label}."
         state.provenance_warnings.append("portal_user_summary_inferred")
