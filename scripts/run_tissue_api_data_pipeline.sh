@@ -30,7 +30,7 @@ set -euo pipefail
 #   PIGEAN_ENABLE            Run PIGEAN when precomputed outputs are not supplied. Default: 1.
 #   PIGEAN_PYTHONPATH        PIGEAN source path. Default: /Users/flannick/codex-workspace/analysis/pigean_optimize/pigean/src.
 #   PIGEAN_MULTI_Y_IN        Multi-trait gene stats file. Default: ../resources/pigean/data/large/all.gene_stats.large.gt1.out.gz.
-#   PIGEAN_TRAIT_BLACKLIST   Trait blacklist path, or auto to generate HP_/exomes_ blacklist from PIGEAN_MULTI_Y_IN. Default: auto.
+#   PIGEAN_TRAIT_BLACKLIST   Trait blacklist path, or auto to generate HP_/exomes_/gcat_/Orphanet blacklist from PIGEAN_MULTI_Y_IN. Default: auto.
 #   PIGEAN_GENE_UNIVERSE     Gene universe file. Default: ../resources/pigean/data/reference/NCBI37.3.plink.gene.loc.
 #   PYTHON_CMD               Python executable. Default: ../.venv/bin/python.
 #   CELL_STATE_DE_DIR        Repo directory. Default: directory above this script.

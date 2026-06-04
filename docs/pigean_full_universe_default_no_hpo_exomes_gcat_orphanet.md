@@ -1,9 +1,8 @@
-# PIGEAN Full-Universe Default Run Without HPO/Exome Traits
+# PIGEAN Full-Universe Default Run With Trait Blacklist
 
-This is the PIGEAN command style to use for the production cell-state pipeline.
-It mirrors the validated run script:
+This is the PIGEAN command style to use for the production cell-state pipeline. The default blacklist excludes traits beginning with `HP_` or `exomes_`, and traits containing `gcat_` or `Orphanet`. It mirrors the validated run script:
 
-`../blanc_screen/results/pigean_all_cell_states_full_universe_default_no_hpo_exomes/run_pigean_all_cell_states_full_universe_default_no_hpo_exomes.sh`
+`../blanc_screen/results/pigean_all_cell_states_full_universe_default_no_hpo_exomes_gcat_orphanet/run_pigean_all_cell_states_full_universe_default_no_hpo_exomes_gcat_orphanet.sh`
 
 Run PIGEAN once per signature method within each cell type/group. Do not
 concatenate GMTs across cell types before running PIGEAN.
@@ -15,7 +14,7 @@ PYTHON_BIN="../.venv/bin/python"
 PIGEAN_SRC="/Users/flannick/codex-workspace/analysis/pigean_optimize/pigean/src"
 MULTI_Y_IN="../resources/pigean/data/large/all.gene_stats.large.gt1.out.gz"
 GENE_UNIVERSE="../resources/pigean/data/reference/NCBI37.3.plink.gene.loc"
-TRAIT_BLACKLIST="results/pigean_all_cell_states_full_universe_default_no_hpo_exomes/trait_blacklist_exomes_hp.txt"
+TRAIT_BLACKLIST="results/pigean_all_cell_states_full_universe_default_no_hpo_exomes_gcat_orphanet/trait_blacklist_hp_exomes_gcat_orphanet.txt"
 GMT_ROOT="results/cell_state_de/production_run/groups/<group_label>/state_expression_gmts/gmt"
 OUT_ROOT="results/cell_state_de/production_run/groups/<group_label>/pigean"
 ```
@@ -91,7 +90,7 @@ pigean:
     --multi-y-log-bf-col Direct
     --multi-y-combined-col Combined
     --multi-y-prior-col Indirect
-    --multi-y-trait-blacklist-in results/pigean_all_cell_states_full_universe_default_no_hpo_exomes/trait_blacklist_exomes_hp.txt
+    --multi-y-trait-blacklist-in results/pigean_all_cell_states_full_universe_default_no_hpo_exomes_gcat_orphanet/trait_blacklist_hp_exomes_gcat_orphanet.txt
     --gene-universe-in ../resources/pigean/data/reference/NCBI37.3.plink.gene.loc
     --gene-universe-id-col 6
     --gene-universe-no-header

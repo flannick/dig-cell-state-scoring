@@ -65,7 +65,11 @@ def pick_col(frame: pd.DataFrame, names: list[str]) -> str | None:
     return None
 
 
-def generate_hp_exomes_blacklist(multi_y_in: Path, out_path: Path, pheno_col: str = "Trait_Internal") -> Path:
+def trait_is_auto_blacklisted(trait: str) -> bool:
+    return trait.startswith("HP_") or trait.startswith("exomes_") or "gcat_" in trait or "Orphanet" in trait
+
+
+def generate_auto_trait_blacklist(multi_y_in: Path, out_path: Path, pheno_col: str = "Trait_Internal") -> Path:
     opener = gzip.open if str(multi_y_in).endswith(".gz") else open
     traits: set[str] = set()
     with opener(multi_y_in, "rt") as handle:
@@ -78,7 +82,7 @@ def generate_hp_exomes_blacklist(multi_y_in: Path, out_path: Path, pheno_col: st
             if idx >= len(parts):
                 continue
             trait = parts[idx]
-            if trait.startswith("HP_") or trait.startswith("exomes_"):
+            if trait_is_auto_blacklisted(trait):
                 traits.add(trait)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text("".join(f"{trait}\n" for trait in sorted(traits)), encoding="utf-8")
@@ -86,15 +90,12 @@ def generate_hp_exomes_blacklist(multi_y_in: Path, out_path: Path, pheno_col: st
 
 
 def resolve_trait_blacklist(path_text: str, multi_y_in: Path, out_dir: Path) -> Path:
-    if path_text in {"", "auto", "AUTO", "hp_exomes", "HP_EXOMES"}:
-        return generate_hp_exomes_blacklist(multi_y_in, out_dir / "trait_blacklist_hp_exomes.txt")
+    if path_text in {"", "auto", "AUTO", "hp_exomes", "HP_EXOMES", "hp_exomes_gcat_orphanet", "HP_EXOMES_GCAT_ORPHANET"}:
+        return generate_auto_trait_blacklist(multi_y_in, out_dir / "trait_blacklist_hp_exomes_gcat_orphanet.txt")
     blacklist = Path(path_text)
     if blacklist.exists():
         return blacklist
-    fallback = Path("../blanc_screen/results/pigean_all_cell_states_full_universe_default_no_hpo_exomes/trait_blacklist_exomes_hp.txt")
-    if fallback.exists():
-        return fallback
-    return generate_hp_exomes_blacklist(multi_y_in, out_dir / "trait_blacklist_hp_exomes.txt")
+    return generate_auto_trait_blacklist(multi_y_in, out_dir / "trait_blacklist_hp_exomes_gcat_orphanet.txt")
 
 
 def normalize_one(frame: pd.DataFrame, *, gmt: Path, cell_type: str, tissue: str, dataset: str, model: str, kind: str) -> pd.DataFrame:
@@ -135,7 +136,7 @@ def main() -> None:
     ap.add_argument("--python", default=sys.executable)
     ap.add_argument("--pythonpath", default="/Users/flannick/codex-workspace/analysis/pigean_optimize/pigean/src")
     ap.add_argument("--multi-y-in", default="../resources/pigean/data/large/all.gene_stats.large.gt1.out.gz")
-    ap.add_argument("--trait-blacklist-in", default="auto", help="Trait blacklist path, or auto to generate HP_/exomes_ blacklist from --multi-y-in")
+    ap.add_argument("--trait-blacklist-in", default="auto", help="Trait blacklist path, or auto to generate HP_/exomes_/gcat_/Orphanet blacklist from --multi-y-in")
     ap.add_argument("--gene-universe-in", default="../resources/pigean/data/reference/NCBI37.3.plink.gene.loc")
     ap.add_argument("--force", action="store_true")
     args = ap.parse_args()

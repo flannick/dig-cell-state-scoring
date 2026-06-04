@@ -36,6 +36,7 @@ set -euo pipefail
 #   TOP_PROGRAM_GENES=200 ./cell_state_de/scripts/run_fnih_pancreas_api_data_pipeline.sh
 #   CELL_SAMPLE_FRACTION=1.0 ./cell_state_de/scripts/run_fnih_pancreas_api_data_pipeline.sh   # full run
 #   CELL_SAMPLE_FRACTION=0.10 CELL_SAMPLE_SEED=1 ./cell_state_de/scripts/run_fnih_pancreas_api_data_pipeline.sh
+#   PIGEAN_TRAIT_BLACKLIST=auto excludes HP_, exomes_, gcat_, and Orphanet traits.
 
 PYTHON_CMD="${PYTHON_CMD:-../.venv/bin/python}"
 TISSUE_ROOT="${TISSUE_ROOT:-results/fnih/pancreas}"

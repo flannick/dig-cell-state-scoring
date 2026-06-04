@@ -108,7 +108,7 @@ donor_expression_genes: query
 write_donor_state_expression: true
 pigean:
   pigean_command: ../.venv/bin/python
-  pigean_command_template: "env PYTHONPATH=/Users/flannick/codex-workspace/analysis/pigean_optimize/pigean/src {pigean} -m pigean betas --X-in {gmt} --multi-y-in {multi_y} --multi-y-id-col Gene --multi-y-pheno-col Trait_Internal --multi-y-log-bf-col Direct --multi-y-combined-col Combined --multi-y-prior-col Indirect --multi-y-trait-blacklist-in results/pigean_all_cell_states_full_universe_default_no_hpo_exomes/trait_blacklist_exomes_hp.txt --gene-universe-in ../resources/pigean/data/reference/NCBI37.3.plink.gene.loc --gene-universe-id-col 6 --gene-universe-no-header --gene-set-stats-out {out} --params-out {out_dir}/params.out.gz --log-file {out_dir}/run.log --warnings-file {out_dir}/warnings.log --output-detail debug --deterministic --hide-progress --min-gene-set-size 1 --filter-gene-set-p 1 --max-gene-set-read-p 1 --no-filter-negative --prune-gene-sets 1.1 --weighted-prune-gene-sets 1.1 {extra_args}"
+  pigean_command_template: "env PYTHONPATH=/Users/flannick/codex-workspace/analysis/pigean_optimize/pigean/src {pigean} -m pigean betas --X-in {gmt} --multi-y-in {multi_y} --multi-y-id-col Gene --multi-y-pheno-col Trait_Internal --multi-y-log-bf-col Direct --multi-y-combined-col Combined --multi-y-prior-col Indirect --multi-y-trait-blacklist-in results/pigean_all_cell_states_full_universe_default_no_hpo_exomes_gcat_orphanet/trait_blacklist_hp_exomes_gcat_orphanet.txt --gene-universe-in ../resources/pigean/data/reference/NCBI37.3.plink.gene.loc --gene-universe-id-col 6 --gene-universe-no-header --gene-set-stats-out {out} --params-out {out_dir}/params.out.gz --log-file {out_dir}/run.log --warnings-file {out_dir}/warnings.log --output-detail debug --deterministic --hide-progress --min-gene-set-size 1 --filter-gene-set-p 1 --max-gene-set-read-p 1 --no-filter-negative --prune-gene-sets 1.1 --weighted-prune-gene-sets 1.1 {extra_args}"
   multi_y_input: ../resources/pigean/data/large/all.gene_stats.large.gt1.out.gz
   methods: [original_markers, top_absolute_expression, top_specific_fc, top_specific_logp]
   dry_run: false
@@ -126,7 +126,7 @@ Use `--dry-run` first to write the planned commands, group manifest, and timing 
 When PIGEAN is configured, the batch runner runs PIGEAN once per signature
 method within each group/cell type across that group's states. It does not
 concatenate GMTs across cell types before running PIGEAN.
-See [docs/pigean_full_universe_default_no_hpo_exomes.md](docs/pigean_full_universe_default_no_hpo_exomes.md)
+See [docs/pigean_full_universe_default_no_hpo_exomes_gcat_orphanet.md](docs/pigean_full_universe_default_no_hpo_exomes_gcat_orphanet.md)
 for the full validated PIGEAN command and template.
 
 ## State Manifest
@@ -520,7 +520,7 @@ either PIGEAN outputs or a runnable `run_pigean.sh` if PIGEAN is unavailable or
 `--dry-run` is used.
 
 For the full-universe default run excluding HPO/exome traits, use the template
-in [docs/pigean_full_universe_default_no_hpo_exomes.md](docs/pigean_full_universe_default_no_hpo_exomes.md).
+in [docs/pigean_full_universe_default_no_hpo_exomes_gcat_orphanet.md](docs/pigean_full_universe_default_no_hpo_exomes_gcat_orphanet.md).
 If a local PIGEAN installation uses different option names, use
 `--pigean-command-template`, for example:
 
