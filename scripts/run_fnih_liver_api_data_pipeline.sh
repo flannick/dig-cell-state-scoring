@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Example API-minimal liver run using local FNIH liver expression/metadata
-# and LIGER program files.
+# API-minimal liver run using local FNIH liver expression/metadata and LIGER
+# program files.
 #
-# Input files used:
-#   data/external/fnih/liver/norm_counts.tsv.gz.bd5a45ba
+# Inputs used:
+#   data/external/fnih/liver/norm_counts.tsv.gz
 #   data/external/fnih/liver/sample_metadata.tsv.gz
 #   cell_state_de/dat/liver/liver_cell_state_markers.gmt
 #   cell_state_de/dat/api/curated_cell_state_manifest.tsv
@@ -22,17 +22,15 @@ set -euo pipefail
 #   cell_state_pigean_trait_results.tsv.gz
 #   program_state_heatmap.tsv.gz
 #
-# Intermediates are written only under results/fnih/liver/tmp:
-#   input_metadata.tsv.gz and program_cell_type_map.tsv
-#   rank_10x/ sparse matrix converted from norm_counts.tsv.gz.bd5a45ba
-#   combined signatures/manifests, scoring, expression, matching, and logs.
-#
+# Intermediates are written only under results/fnih/liver/tmp.
 # Default behavior uses CELL_SAMPLE_FRACTION=0.10 for a first-pass liver run.
 # Override examples:
 #   TISSUE_ROOT=/path/to/liver bash cell_state_de/scripts/run_fnih_liver_api_data_pipeline.sh
-#   TOP_PROGRAM_GENES=200 bash cell_state_de/scripts/run_fnih_liver_api_data_pipeline.sh
 #   CELL_SAMPLE_FRACTION=1.0 bash cell_state_de/scripts/run_fnih_liver_api_data_pipeline.sh   # full run
-#   CELL_SAMPLE_FRACTION=0.10 CELL_SAMPLE_SEED=1 bash cell_state_de/scripts/run_fnih_liver_api_data_pipeline.sh
+#   PIGEAN_ENABLE=0 bash cell_state_de/scripts/run_fnih_liver_api_data_pipeline.sh
+#
+# To force a clean rerun after a map update, use:
+#   bash cell_state_de/scripts/rebuild_fnih_liver_api_data_pipeline.sh
 
 PYTHON_CMD="${PYTHON_CMD:-../.venv/bin/python}"
 TISSUE_ROOT="${TISSUE_ROOT:-results/fnih/liver}"
@@ -46,6 +44,7 @@ PIGEAN_MULTI_Y_IN="${PIGEAN_MULTI_Y_IN:-../resources/pigean/data/large/all.gene_
 PIGEAN_TRAIT_BLACKLIST="${PIGEAN_TRAIT_BLACKLIST:-auto}"
 PIGEAN_GENE_UNIVERSE="${PIGEAN_GENE_UNIVERSE:-../resources/pigean/data/reference/NCBI37.3.plink.gene.loc}"
 DEFAULT_STATE_WEIGHT_TYPE="${DEFAULT_STATE_WEIGHT_TYPE:-gradient_percentile_squared}"
+EXPRESSION_VALUE_TYPE="${EXPRESSION_VALUE_TYPE:-auto}"
 FORCE="${FORCE:-0}"
 mkdir -p "${TISSUE_ROOT}/tmp"
 
@@ -71,7 +70,7 @@ cell_type_map = {
     'macrophage': 'macrophage',
     'mast cell': 'mast_cell',
 }
-cell_type_source = metadata['cell_type__kp'].astype(str)
+cell_type_source = metadata['cell_type__kp'].astype(str).str.strip()
 cell_type = cell_type_source.map(cell_type_map).fillna(
     cell_type_source.str.lower().str.replace(r'[^a-z0-9]+', '_', regex=True).str.strip('_')
 )
@@ -100,8 +99,8 @@ PY
 
 TISSUE_ROOT="${TISSUE_ROOT}" \
 TISSUE_ID="liver" \
-EXPRESSION_TSV="data/external/fnih/liver/norm_counts.tsv.gz.bd5a45ba" \
-EXPRESSION_VALUE_TYPE="log1p_normalized" \
+EXPRESSION_TSV="data/external/fnih/liver/norm_counts.tsv.gz" \
+EXPRESSION_VALUE_TYPE="${EXPRESSION_VALUE_TYPE}" \
 METADATA="${TISSUE_ROOT}/tmp/input_metadata.tsv.gz" \
 STATES_GMT="${CELL_STATE_DE_DIR}/dat/liver/liver_cell_state_markers.gmt" \
 STATE_MANIFEST="${CELL_STATE_DE_DIR}/dat/api/curated_cell_state_manifest.tsv" \

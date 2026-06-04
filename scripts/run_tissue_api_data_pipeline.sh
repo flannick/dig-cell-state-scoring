@@ -474,6 +474,7 @@ if [[ "${PIGEAN_ENABLE}" == "1" || "${PIGEAN_ENABLE}" == "true" ]]; then
       --multi-y-in "${PIGEAN_MULTI_Y_IN}" \
       --trait-blacklist-in "${PIGEAN_TRAIT_BLACKLIST}" \
       --gene-universe-in "${PIGEAN_GENE_UNIVERSE}" \
+      --positive-beta-uncorrected-only \
       > >(tee "${LOG_DIR}/pigean_curated.stdout.log") \
       2> >(tee "${LOG_DIR}/pigean_curated.stderr.log" >&2)
   fi
@@ -493,6 +494,7 @@ if [[ "${PIGEAN_ENABLE}" == "1" || "${PIGEAN_ENABLE}" == "true" ]]; then
       --multi-y-in "${PIGEAN_MULTI_Y_IN}" \
       --trait-blacklist-in "${PIGEAN_TRAIT_BLACKLIST}" \
       --gene-universe-in "${PIGEAN_GENE_UNIVERSE}" \
+      --positive-beta-uncorrected-only \
       > >(tee "${LOG_DIR}/pigean_program.stdout.log") \
       2> >(tee "${LOG_DIR}/pigean_program.stderr.log" >&2)
   fi

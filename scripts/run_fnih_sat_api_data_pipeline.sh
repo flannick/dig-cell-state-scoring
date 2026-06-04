@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# API-minimal kidney run using local FNIH kidney expression/metadata and LIGER
-# program files.
+# Example API-minimal SAT run using local FNIH SAT expression/metadata
+# and LIGER program files.
 #
-# Inputs used:
-#   data/external/fnih/kidney/norm_counts.tsv.gz
-#   data/external/fnih/kidney/sample_metadata.tsv.gz
-#   cell_state_de/dat/kidney/kidney_cell_state_markers.gmt
+# Input files used:
+#   data/external/fnih/sat/norm_counts.tsv.gz
+#   data/external/fnih/sat/sample_metadata.tsv.gz
+#   cell_state_de/dat/sat/sat_cell_state_markers.gmt
 #   cell_state_de/dat/api/curated_cell_state_manifest.tsv
-#   data/external/liger/kidney/<cell type>/gene_loadings.tsv
-#   data/external/liger/kidney/<cell type>/cell_scores.tsv, when present
+#   data/external/liger/sat/<cell type>/gene_loadings.tsv
+#   data/external/liger/sat/<cell type>/cell_scores.tsv, when present
 #
-# Final API-ready files written to results/fnih/kidney/out:
+# Final API-ready files written to results/fnih/sat/out:
 #   cell_state_expression.tsv.gz
 #   cell_type_expression.tsv.gz
 #   program_expression.tsv.gz
@@ -22,15 +22,21 @@ set -euo pipefail
 #   cell_state_pigean_trait_results.tsv.gz
 #   program_state_heatmap.tsv.gz
 #
-# Intermediates are written only under results/fnih/kidney/tmp.
-# Default behavior uses CELL_SAMPLE_FRACTION=0.10 for a first-pass kidney run.
+# Intermediates are written only under results/fnih/sat/tmp:
+#   input_metadata.tsv.gz and program_cell_type_map.tsv
+#   rank_10x/ sparse matrix converted from norm_counts.tsv.gz
+#   combined signatures/manifests, scoring, expression, matching, and logs.
+#
+# Default behavior uses CELL_SAMPLE_FRACTION=0.10 for a first-pass SAT run.
 # Override examples:
-#   TISSUE_ROOT=/path/to/kidney bash cell_state_de/scripts/run_fnih_kidney_api_data_pipeline.sh
-#   CELL_SAMPLE_FRACTION=1.0 bash cell_state_de/scripts/run_fnih_kidney_api_data_pipeline.sh   # full run
-#   PIGEAN_ENABLE=0 bash cell_state_de/scripts/run_fnih_kidney_api_data_pipeline.sh
+#   TISSUE_ROOT=/path/to/sat bash cell_state_de/scripts/run_fnih_sat_api_data_pipeline.sh
+#   TOP_PROGRAM_GENES=200 bash cell_state_de/scripts/run_fnih_sat_api_data_pipeline.sh
+#   CELL_SAMPLE_FRACTION=1.0 bash cell_state_de/scripts/run_fnih_sat_api_data_pipeline.sh   # full run
+#   CELL_SAMPLE_FRACTION=0.10 CELL_SAMPLE_SEED=1 bash cell_state_de/scripts/run_fnih_sat_api_data_pipeline.sh
+#   PIGEAN_TRAIT_BLACKLIST=auto excludes HP_, exomes_, gcat_, and Orphanet traits.
 
 PYTHON_CMD="${PYTHON_CMD:-../.venv/bin/python}"
-TISSUE_ROOT="${TISSUE_ROOT:-results/fnih/kidney}"
+TISSUE_ROOT="${TISSUE_ROOT:-results/fnih/sat}"
 CELL_STATE_DE_DIR="${CELL_STATE_DE_DIR:-cell_state_de}"
 CELL_SAMPLE_FRACTION="${CELL_SAMPLE_FRACTION:-0.10}"
 CELL_SAMPLE_SEED="${CELL_SAMPLE_SEED:-1}"
@@ -45,29 +51,34 @@ EXPRESSION_VALUE_TYPE="${EXPRESSION_VALUE_TYPE:-auto}"
 FORCE="${FORCE:-0}"
 mkdir -p "${TISSUE_ROOT}/tmp"
 
-TISSUE_ROOT="${TISSUE_ROOT}" "${PYTHON_CMD}" - <<'PY'
+TISSUE_ROOT="${TISSUE_ROOT}" "${PYTHON_CMD}" - <<'PY_WRAPPER'
 from pathlib import Path
 import os
 import pandas as pd
 
-root = Path(os.environ.get('TISSUE_ROOT', 'results/fnih/kidney'))
+root = Path(os.environ.get('TISSUE_ROOT', 'results/fnih/sat'))
 tmp = root / 'tmp'
 tmp.mkdir(parents=True, exist_ok=True)
-metadata = pd.read_csv('data/external/fnih/kidney/sample_metadata.tsv.gz', sep='\t', compression='infer', low_memory=False)
+metadata = pd.read_csv('data/external/fnih/sat/sample_metadata.tsv.gz', sep='\t', compression='infer', low_memory=False)
 
 cell_type_map = {
-    'Connecting Tubule Cell': 'kidney_connecting_tubule_epithelial_cell',
-    'Immune Cell': 'immune_cell',
-    'Intercalated Cell': 'kidney_collecting_duct_intercalated_cell',
-    'Thick Ascending Limb Cell': 'kidney_loop_of_henle_thick_ascending_limb_epithelial_cell',
-    'Vascular Smooth Muscle Cell/Pericyte': 'kidney_interstitial_cell',
-    'distal tubule epithelial cell': 'kidney_distal_convoluted_tubule_epithelial_cell',
+    'ASPC': 'aspc',
+    'B cell': 'b_cell',
+    'LEC': 'lec',
+    'NK cell': 'nk_cell',
+    'NK Cell': 'nk_cell',
+    'SMC': 'smc',
+    'T cell': 't_cell',
+    'adipocyte': 'adipocyte',
+    'dendritic cell': 'dendritic_cell',
+    'endometrium': 'endometrium',
     'endothelial': 'endothelial',
-    'epithelial cell of proximal tubule': 'epithelial_cell_of_proximal_tubule',
-    'fibroblast': 'kidney_interstitial_cell',
-    'parietal epithelial cell': 'parietal_epithelial_cell',
-    'podocyte': 'podocyte',
-    'principal cell': 'kidney_collecting_duct_principal_cell',
+    'macrophage': 'macrophage',
+    'mast cell': 'mast_cell',
+    'mesothelium': 'mesothelium',
+    'monocyte': 'monocyte',
+    'neutrophil': 'neutrophil',
+    'pericyte': 'pericyte',
 }
 cell_type_source = metadata['cell_type__kp'].astype(str).str.strip()
 cell_type = cell_type_source.map(cell_type_map).fillna(
@@ -75,35 +86,29 @@ cell_type = cell_type_source.map(cell_type_map).fillna(
 )
 out = pd.DataFrame({
     'cell_id': metadata['ID'].astype(str),
-    'map_id': 'fnih_kidney',
-    'tissue': 'kidney',
+    'map_id': 'fnih_sat',
+    'tissue': 'sat',
     'cell_type': cell_type,
     'donor_id': metadata['donor_id'].astype(str),
     'sample_id': metadata['biosample_id'].astype(str),
 })
 out.to_csv(tmp / 'input_metadata.tsv.gz', sep='\t', index=False, compression='gzip')
 program_map = pd.DataFrame([
-    ('Connecting Tubule Cell', 'kidney_connecting_tubule_epithelial_cell'),
-    ('Immune Cell', 'immune_cell'),
-    ('Intercalated Cell', 'kidney_collecting_duct_intercalated_cell'),
-    ('Thick Ascending Limb Cell', 'kidney_loop_of_henle_thick_ascending_limb_epithelial_cell'),
-    ('Vascular Smooth Muscle Cell Pericyte', 'kidney_interstitial_cell'),
-    ('distal tubule epithelial cell', 'kidney_distal_convoluted_tubule_epithelial_cell'),
-    ('endothelial', 'endothelial'),
-    ('epithelial cell of proximal tubule', 'epithelial_cell_of_proximal_tubule'),
-    ('fibroblast', 'kidney_interstitial_cell'),
-    ('parietal epithelial cell', 'parietal_epithelial_cell'),
-    ('principal cell', 'kidney_collecting_duct_principal_cell'),
+    ('SMC', 'smc'),
+    ('T cell', 't_cell'),
+    ('adipocyte', 'adipocyte'),
+    ('mast cell', 'mast_cell'),
+    ('pericyte', 'pericyte'),
 ], columns=['program_dir', 'cell_type'])
 program_map.to_csv(tmp / 'program_cell_type_map.tsv', sep='\t', index=False)
-PY
+PY_WRAPPER
 
 TISSUE_ROOT="${TISSUE_ROOT}" \
-TISSUE_ID="kidney" \
-EXPRESSION_TSV="data/external/fnih/kidney/norm_counts.tsv.gz" \
+TISSUE_ID="sat" \
+EXPRESSION_TSV="data/external/fnih/sat/norm_counts.tsv.gz" \
 EXPRESSION_VALUE_TYPE="${EXPRESSION_VALUE_TYPE}" \
 METADATA="${TISSUE_ROOT}/tmp/input_metadata.tsv.gz" \
-STATES_GMT="${CELL_STATE_DE_DIR}/dat/kidney/kidney_cell_state_markers.gmt" \
+STATES_GMT="${CELL_STATE_DE_DIR}/dat/sat/sat_cell_state_markers.gmt" \
 STATE_MANIFEST="${CELL_STATE_DE_DIR}/dat/api/curated_cell_state_manifest.tsv" \
 CELL_ID_COL="cell_id" \
 TISSUE_COL="tissue" \
@@ -113,7 +118,7 @@ SAMPLE_COL="sample_id" \
 MAP_ID_COL="map_id" \
 DATASET="scRNA" \
 MODEL="mouse_msigdb" \
-PROGRAM_ROOT="data/external/liger/kidney" \
+PROGRAM_ROOT="data/external/liger/sat" \
 PROGRAM_CELL_TYPE_MAP="${TISSUE_ROOT}/tmp/program_cell_type_map.tsv" \
 TOP_PROGRAM_GENES="${TOP_PROGRAM_GENES:-100}" \
 CELL_SAMPLE_FRACTION="${CELL_SAMPLE_FRACTION}" \

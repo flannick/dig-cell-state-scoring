@@ -98,6 +98,13 @@ def resolve_trait_blacklist(path_text: str, multi_y_in: Path, out_dir: Path) -> 
     return generate_auto_trait_blacklist(multi_y_in, out_dir / "trait_blacklist_hp_exomes_gcat_orphanet.txt")
 
 
+def keep_positive_beta_uncorrected(frame: pd.DataFrame) -> pd.DataFrame:
+    if frame.empty or "beta_uncorrected" not in frame.columns:
+        return frame
+    beta_uncorrected = pd.to_numeric(frame["beta_uncorrected"], errors="coerce")
+    return frame[beta_uncorrected.gt(0)].copy()
+
+
 def normalize_one(frame: pd.DataFrame, *, gmt: Path, cell_type: str, tissue: str, dataset: str, model: str, kind: str) -> pd.DataFrame:
     if frame.empty:
         return pd.DataFrame()
@@ -107,7 +114,7 @@ def normalize_one(frame: pd.DataFrame, *, gmt: Path, cell_type: str, tissue: str
     beta_unc_col = pick_col(frame, ["beta_uncorrected", "Beta_uncorrected", "beta_uncorrected_orig"])
     if gene_set_col is None:
         return pd.DataFrame()
-    out = pd.DataFrame()
+    out = pd.DataFrame(index=frame.index)
     out["gene_set_id"] = frame[gene_set_col].astype(str)
     out["trait"] = frame[trait_col].astype(str) if trait_col else ""
     out["beta"] = pd.to_numeric(frame[beta_col], errors="coerce") if beta_col else pd.NA
@@ -138,6 +145,12 @@ def main() -> None:
     ap.add_argument("--multi-y-in", default="../resources/pigean/data/large/all.gene_stats.large.gt1.out.gz")
     ap.add_argument("--trait-blacklist-in", default="auto", help="Trait blacklist path, or auto to generate HP_/exomes_/gcat_/Orphanet blacklist from --multi-y-in")
     ap.add_argument("--gene-universe-in", default="../resources/pigean/data/reference/NCBI37.3.plink.gene.loc")
+    ap.add_argument(
+        "--positive-beta-uncorrected-only",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Only emit combined API rows with beta_uncorrected > 0. Use --no-positive-beta-uncorrected-only to keep all rows.",
+    )
     ap.add_argument("--force", action="store_true")
     args = ap.parse_args()
 
@@ -154,10 +167,19 @@ def main() -> None:
     print(f"Using PIGEAN trait blacklist {blacklist}", flush=True)
 
     frames = []
+    gmt_files = []
     for gmt in sorted(args.gmt_dir.glob("*.gmt")):
-        if not gmt.stat().st_size or not read_gmt_names(gmt):
+        if not gmt.stat().st_size:
             continue
+        names = read_gmt_names(gmt)
+        if not names:
+            continue
+        gmt_files.append((gmt, names))
+    total_gmts = len(gmt_files)
+    print(f"PIGEAN {args.kind}: processing {total_gmts} cell-type GMTs from {args.gmt_dir}", flush=True)
+    for index, (gmt, gene_set_names) in enumerate(gmt_files, start=1):
         cell_type = gmt.stem
+        print(f"[{index}/{total_gmts}] {args.kind} PIGEAN cell_type={cell_type} gene_sets={len(gene_set_names)}", flush=True)
         run_dir = args.out_dir / cell_type
         stats_out = run_dir / "gene_set_stats.debug.out.gz"
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -186,6 +208,7 @@ def main() -> None:
                 "--filter-gene-set-p", "1",
                 "--max-gene-set-read-p", "1",
                 "--no-filter-negative",
+                "--max-no-write-gene-set-beta-uncorrected", "0",
                 "--prune-gene-sets", "1.1",
                 "--weighted-prune-gene-sets", "1.1",
         ]
@@ -194,6 +217,7 @@ def main() -> None:
         previous_command = command_path.read_text(encoding="utf-8") if command_path.exists() else ""
         needs_run = args.force or not stats_out.exists() or stats_out.stat().st_size == 0 or previous_command != command_text
         if needs_run:
+            print(f"[{index}/{total_gmts}] running PIGEAN for {cell_type}", flush=True)
             for stale in [stats_out, run_dir / "params.out.gz"]:
                 if stale.exists():
                     stale.unlink()
@@ -202,8 +226,18 @@ def main() -> None:
             env["PYTHONPATH"] = args.pythonpath
             with (run_dir / "stdout.log").open("w") as stdout, (run_dir / "stderr.log").open("w") as stderr:
                 subprocess.run(cmd, env=env, stdout=stdout, stderr=stderr, check=True)
+        else:
+            print(f"[{index}/{total_gmts}] reusing PIGEAN output for {cell_type}", flush=True)
         frame = read_table(stats_out)
         norm = normalize_one(frame, gmt=gmt, cell_type=cell_type, tissue=args.tissue, dataset=args.dataset, model=args.model, kind=args.kind)
+        rows_before_filter = len(norm)
+        if args.positive_beta_uncorrected_only:
+            norm = keep_positive_beta_uncorrected(norm)
+        rows_after_filter = len(norm)
+        if args.positive_beta_uncorrected_only:
+            print(f"[{index}/{total_gmts}] {cell_type}: normalized_rows={rows_before_filter} positive_beta_uncorrected_rows={rows_after_filter}", flush=True)
+        else:
+            print(f"[{index}/{total_gmts}] {cell_type}: normalized_rows={rows_after_filter}", flush=True)
         if not norm.empty:
             frames.append(norm)
     combined = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()

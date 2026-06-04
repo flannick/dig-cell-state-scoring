@@ -821,11 +821,10 @@ def finish_state(state: StateRecord, curation_version: str, gmt_row: dict[str, A
     if state.state_class == "composite_required":
         state.is_composite_required = True
     if not state.manual_review_status:
-        state.manual_review_status = "reviewed" if state.source_workbook and state.markers else "needs_review"
+        state.manual_review_status = "Not yet reviewed"
     if not state.state_level_citation_ids and not any(m.citation_id for m in state.markers.values()):
         state.provenance_warnings.append("missing_citation_or_source")
-        if state.manual_review_status == "reviewed":
-            state.manual_review_status = "needs_review"
+    state.manual_review_status = "Not yet reviewed"
     if state.state_class in {"broad_identity_gradient", "broad_function_gradient", "process_gradient", "composite_required", "unknown"}:
         if "allow_hard_call" not in state.excel_metadata_fields:
             state.allow_hard_call = False
@@ -899,6 +898,7 @@ def state_manifest_v2_row(state: StateRecord, curation_version: str) -> dict[str
         "interpretation_status": state.interpretation_status,
         "release_class": state.release_class,
         "manual_review_status": state.manual_review_status,
+        "quality": "AI curated",
         "is_composite_required": str(state.is_composite_required).lower(),
         "is_qc": str(state.is_qc).lower(),
         "allow_hard_call": str(state.allow_hard_call).lower(),
@@ -906,6 +906,7 @@ def state_manifest_v2_row(state: StateRecord, curation_version: str) -> dict[str
         "required_supporting_evidence": state.required_supporting_evidence,
         "do_not_overinterpret_as": state.do_not_overinterpret_as,
         "known_limitations": state.known_limitations,
+        "quality": "AI curated",
         "quality_badges": ";".join(state.quality_badges),
         "biological_category": state.biological_category,
         "disease_context": state.disease_context,
@@ -1070,7 +1071,9 @@ def detail_object(state: StateRecord, curation_version: str, citations: dict[str
             "links": {"pigean_results_api": f"/api/cell-states/{state.state_id}/pigean"},
         },
         "quality": {
-            "quality_class": "curated_biological_state",
+            "quality": "AI curated",
+            "quality_label": "AI curated",
+            "quality_class": "AI curated",
             "quality_badges": state.quality_badges,
             "qc_caveats": [],
             "known_limitations": split_list_field(state.known_limitations),
@@ -1107,6 +1110,7 @@ def build_index(states: list[StateRecord], curation_version: str) -> dict[str, A
                 "interpretation_status": state.interpretation_status,
                 "n_markers": len(state.markers),
                 "manual_review_status": state.manual_review_status,
+                "quality": "AI curated",
             }
         )
     tissue_list = []
