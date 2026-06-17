@@ -337,8 +337,8 @@ def load_state_manifest(path: str) -> dict[str, dict[str, object]]:
         return {}
     frame = read_table(path)
     if "state_name" not in frame.columns:
-        if "name" in frame.columns:
-            frame = frame.rename(columns={"name": "state_name"})
+        if "display_name" in frame.columns:
+            frame = frame.rename(columns={"display_name": "state_name"})
         else:
             raise SystemExit("--state-manifest must include a state_name column")
     manifest: dict[str, dict[str, object]] = {}
