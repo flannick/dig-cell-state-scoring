@@ -701,7 +701,7 @@ def main() -> None:
         state_meta[state_key] = group.iloc[0]
         state_parent[state_key] = parent
 
-    for parent in pd.unique(list(state_parent.values())):
+    for parent in pd.unique(pd.Series(state_parent.values())):
         states_for_parent = [state_key for state_key, value in state_parent.items() if value == parent]
         parent_idx = np.flatnonzero(parent_key.to_numpy() == parent)
         if len(parent_idx) == 0:

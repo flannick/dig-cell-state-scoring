@@ -89,13 +89,13 @@ def generate_auto_trait_blacklist(multi_y_in: Path, out_path: Path, pheno_col: s
     return out_path
 
 
-def resolve_trait_blacklist(path_text: str, multi_y_in: Path, out_dir: Path) -> Path:
+def resolve_trait_blacklist(path_text: str, multi_y_in: Path, out_dir: Path, pheno_col: str) -> Path:
     if path_text in {"", "auto", "AUTO", "hp_exomes", "HP_EXOMES", "hp_exomes_gcat_orphanet", "HP_EXOMES_GCAT_ORPHANET"}:
-        return generate_auto_trait_blacklist(multi_y_in, out_dir / "trait_blacklist_hp_exomes_gcat_orphanet.txt")
+        return generate_auto_trait_blacklist(multi_y_in, out_dir / "trait_blacklist_hp_exomes_gcat_orphanet.txt", pheno_col)
     blacklist = Path(path_text)
     if blacklist.exists():
         return blacklist
-    return generate_auto_trait_blacklist(multi_y_in, out_dir / "trait_blacklist_hp_exomes_gcat_orphanet.txt")
+    return generate_auto_trait_blacklist(multi_y_in, out_dir / "trait_blacklist_hp_exomes_gcat_orphanet.txt", pheno_col)
 
 
 def keep_positive_beta_uncorrected(frame: pd.DataFrame) -> pd.DataFrame:
@@ -143,6 +143,11 @@ def main() -> None:
     ap.add_argument("--python", default=sys.executable)
     ap.add_argument("--pythonpath", default="/Users/flannick/codex-workspace/analysis/pigean_optimize/pigean/src")
     ap.add_argument("--multi-y-in", default="../resources/pigean/data/large/all.gene_stats.large.gt1.out.gz")
+    ap.add_argument("--multi-y-id-col", default="Gene")
+    ap.add_argument("--multi-y-pheno-col", default="Trait_Internal")
+    ap.add_argument("--multi-y-log-bf-col", default="Direct")
+    ap.add_argument("--multi-y-combined-col", default="Combined")
+    ap.add_argument("--multi-y-prior-col", default="Indirect")
     ap.add_argument("--trait-blacklist-in", default="auto", help="Trait blacklist path, or auto to generate HP_/exomes_/gcat_/Orphanet blacklist from --multi-y-in")
     ap.add_argument("--gene-universe-in", default="../resources/pigean/data/reference/NCBI37.3.plink.gene.loc")
     ap.add_argument(
@@ -161,7 +166,7 @@ def main() -> None:
     missing = [str(x) for x in [multi_y_in, gene_universe_in] if not x.exists()]
     if missing:
         raise SystemExit("Missing PIGEAN input files: " + ", ".join(missing))
-    blacklist = resolve_trait_blacklist(args.trait_blacklist_in, multi_y_in, args.combined_out.parent)
+    blacklist = resolve_trait_blacklist(args.trait_blacklist_in, multi_y_in, args.combined_out.parent, args.multi_y_pheno_col)
     if not blacklist.exists():
         raise SystemExit(f"Missing PIGEAN trait blacklist: {blacklist}")
     print(f"Using PIGEAN trait blacklist {blacklist}", flush=True)
@@ -188,11 +193,11 @@ def main() -> None:
                 args.python, "-m", "pigean", "betas",
                 "--X-in", str(pigean_x),
                 "--multi-y-in", str(multi_y_in),
-                "--multi-y-id-col", "Gene",
-                "--multi-y-pheno-col", "Trait_Internal",
-                "--multi-y-log-bf-col", "Direct",
-                "--multi-y-combined-col", "Combined",
-                "--multi-y-prior-col", "Indirect",
+                "--multi-y-id-col", str(args.multi_y_id_col),
+                "--multi-y-pheno-col", str(args.multi_y_pheno_col),
+                "--multi-y-log-bf-col", str(args.multi_y_log_bf_col),
+                "--multi-y-combined-col", str(args.multi_y_combined_col),
+                "--multi-y-prior-col", str(args.multi_y_prior_col),
                 "--multi-y-trait-blacklist-in", str(blacklist),
                 "--gene-universe-in", str(gene_universe_in),
                 "--gene-universe-id-col", "6",
