@@ -131,9 +131,9 @@ def normalize_pigean(frame: pd.DataFrame, id_col: str, tissue: str, dataset: str
     if is_program:
         out["dataset"] = dataset
         out["model"] = model
-        out["factor"] = out[id_col].map(display_factor)
         if "cell_type" not in out.columns:
             out["cell_type"] = infer_cell_type_from_gene_set(out[id_col], tissue, True)
+        out["factor"] = out[id_col].map(display_factor)
         return out[["dataset", "cell_type", "model", "factor", "trait", "beta", "beta_uncorrected"]]
     out["tissue"] = out.get("tissue", tissue)
     if "cell_type" not in out.columns:
