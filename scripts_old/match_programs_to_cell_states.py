@@ -6,6 +6,7 @@ from __future__ import annotations
 import warnings
 import argparse
 import gzip
+import hashlib
 import json
 import math
 import platform
@@ -139,6 +140,11 @@ def read_gmt(path: Path, state_type: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def pair_seed(base_seed: int, program_id: str, state_id: str) -> int:
+    digest = hashlib.sha256(f"{base_seed}|{program_id}|{state_id}".encode()).digest()
+    return int.from_bytes(digest[:8], "little")
+
+
 def bh_fdr(values: pd.Series) -> pd.Series:
     p = pd.to_numeric(values, errors="coerce")
     out = pd.Series(np.nan, index=p.index, dtype=float)
@@ -220,7 +226,7 @@ def marker_enrichment_for_pair(
     loadings: pd.DataFrame,
     state: pd.Series,
     args: argparse.Namespace,
-    rng: np.random.Generator,
+    base_seed: int,
     top_n_list: list[int],
     tissue: str,
     cell_type: str,
@@ -275,6 +281,7 @@ def marker_enrichment_for_pair(
     if status == "insufficient_marker_coverage":
         return row
 
+    rng = np.random.default_rng(pair_seed(base_seed, program, state["state_id"]))
     es, leading_idx = gsea_es_for_hit_indices(loading_values, hit_positions, args.gsea_weight)
     null_es = np.empty(args.gsea_permutations, dtype=float)
     for i in range(args.gsea_permutations):
@@ -298,12 +305,11 @@ def marker_enrichment_for_pair(
 
 
 def compute_marker_enrichment(program_loadings: pd.DataFrame, states: pd.DataFrame, args: argparse.Namespace, tissue: str, cell_type: str) -> pd.DataFrame:
-    rng = np.random.default_rng(args.random_seed)
     top_n_list = sorted(set(parse_list(args.program_top_n_list, int) + [50, 100, 200]))
     rows = []
     for program, loadings in program_loadings.groupby("program_id", sort=False):
         for _, state in states.iterrows():
-            rows.append(marker_enrichment_for_pair(program, loadings, state, args, rng, top_n_list, tissue, cell_type))
+            rows.append(marker_enrichment_for_pair(program, loadings, state, args, args.random_seed, top_n_list, tissue, cell_type))
     out = pd.DataFrame(rows)
     for p_col, q_col in [("gsea_p", "gsea_q"), ("loading_mwu_p", "loading_mwu_q")]:
         out[q_col] = bh_fdr(out[p_col])

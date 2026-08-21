@@ -5,9 +5,13 @@ import json
 import os
 from datetime import datetime
 
-from matrix_value_types import VALUE_TYPES, require_nonnegative
-
+VALUE_TYPES = {'raw_counts', 'linear_cp10k', 'log1p_cp10k', 'linear_normalized', 'log1p_normalized'}
 progress_every_rows = 1000
+
+
+def require_nonnegative(has_negative, value_type):
+    if has_negative:
+        raise SystemExit(f'Matrix has negative values but --value-type={value_type}')
 
 
 def parse_float(value):

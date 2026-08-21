@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -38,6 +39,11 @@ def bh_fdr(values):
     q = np.minimum.accumulate(q[::-1])[::-1]
     out.loc[ranked.index] = np.clip(q, 0, 1)
     return out
+
+
+def pair_seed(base_seed, program_id, state_id):
+    digest = hashlib.sha256(f'{base_seed}|{program_id}|{state_id}'.encode()).digest()
+    return int.from_bytes(digest[:8], 'little')
 
 
 def read_gmt(path, state_type):
@@ -77,7 +83,7 @@ def gsea_es_for_hit_indices(loadings, hit_indices):
     return float(max(0.0, running.max()))
 
 
-def marker_enrichment_for_pair(program, loadings, state, rng, tissue, cell_type, gsea_permutations):
+def marker_enrichment_for_pair(program, loadings, state, base_seed, tissue, cell_type, gsea_permutations):
     loadings = loadings.sort_values(['loading', 'gene'], ascending=[False, True])
     genes = loadings['gene'].tolist()
     loading_values = loadings['loading'].to_numpy(float)
@@ -107,6 +113,7 @@ def marker_enrichment_for_pair(program, loadings, state, rng, tissue, cell_type,
     if nh < min_marker_overlap or (not np.isnan(coverage) and coverage < min_marker_coverage) or nh == n_program:
         row['match_status'] = 'insufficient_marker_coverage'
         return row
+    rng = np.random.default_rng(pair_seed(base_seed, program, state['state_id']))
     es = gsea_es_for_hit_indices(loading_values, hit_positions)
     null_es = np.array([gsea_es_for_hit_indices(loading_values, np.sort(rng.choice(n_program, size=nh, replace=False))) for _ in range(gsea_permutations)])
     mean_null = float(np.nanmean(null_es))
@@ -116,9 +123,8 @@ def marker_enrichment_for_pair(program, loadings, state, rng, tissue, cell_type,
 
 
 def compute_marker_enrichment(program_loadings, states, tissue, cell_type, gsea_permutations):
-    rng = np.random.default_rng(random_seed)
     rows = [
-        marker_enrichment_for_pair(program, loadings, state, rng, tissue, cell_type, gsea_permutations)
+        marker_enrichment_for_pair(program, loadings, state, random_seed, tissue, cell_type, gsea_permutations)
         for program, loadings in program_loadings.groupby('program_id', sort=False)
         for _, state in states.iterrows()
     ]

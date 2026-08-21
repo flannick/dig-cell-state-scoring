@@ -14,8 +14,7 @@ import numpy as np
 import pandas as pd
 from scipy.io import mmread
 
-from matrix_value_types import VALUE_TYPES
-
+VALUE_TYPES = {'raw_counts', 'linear_cp10k', 'log1p_cp10k', 'linear_normalized', 'log1p_normalized'}
 min_rank_genes = 5000
 max_rank = 1500
 

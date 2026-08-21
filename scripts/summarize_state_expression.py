@@ -12,14 +12,25 @@ import pandas as pd
 from scipy import sparse, stats
 from scipy.io import mmread
 
-from matrix_value_types import VALUE_TYPES, linearize_expression_matrix
-
+VALUE_TYPES = {'raw_counts', 'linear_cp10k', 'log1p_cp10k', 'linear_normalized', 'log1p_normalized'}
 pseudocount = 0.05
 min_mean_for_log2fc = 0.01
 weight_specs = [
     ('gradient_percentile_squared', 'state_activity_weight_gradient'),
     ('high_tail_percentile_90_100', 'state_activity_weight_hightail'),
 ]
+
+
+def linearize_expression_matrix(matrix, value_type):
+    mat = matrix.astype(float).tocsr(copy=True)
+    if value_type == 'raw_counts':
+        totals = np.asarray(mat.sum(axis=1)).ravel()
+        return mat.multiply(10000.0 / totals[:, None]).tocsr()
+    if value_type in ('linear_cp10k', 'linear_normalized'):
+        return mat
+    mat.data = np.expm1(mat.data)
+    mat.data[mat.data < 0] = 0.0
+    return mat.tocsr()
 
 
 def open_text(path):
@@ -147,9 +158,11 @@ def main():
         'tissue': tissue,
         'cell_type': cell_type,
         'weighted_mean_expression': parent_mean,
+        'weighted_squared_mean_expression': parent_second,
+        'n_parent': n_parent,
         'log10_cpk': np.log10(np.clip(parent_mean, 0, None) + 1.0),
-        'log2fc_weighted_vs_all_parent': np.nan,
-        'p_value': np.nan,
+        'log2fc_weighted_vs_all_parent': np.nan,  # these can be calculated later
+        'p_value': np.nan,  # these can be calculated later
     })
 
     activity = pd.read_csv(args.cell_state_activity, sep='\t', compression='infer')
