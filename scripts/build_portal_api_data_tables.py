@@ -211,7 +211,7 @@ def main() -> None:
         with open(p, 'r') as f:
             for line in f:
                 dict_line = json.loads(line.strip())
-                factor_labels[display_factor(dict_line['factor'])] = dict_line
+                factor_labels[display_factor(dict_line['factor'])] = dict_line['label']
     heat = pd.concat(heat_frames, ignore_index=True) if heat_frames else pd.DataFrame()
     if not heat.empty:
         if "state_name" not in heat.columns and "state_id" in heat.columns:
@@ -230,7 +230,7 @@ def main() -> None:
         labels["dataset"] = args.dataset
         labels["model"] = args.model
         labels["factor"] = labels["program_id"].map(display_factor)
-        labels["label"] = labels["factor"].map(lambda x: factor_labels.get(x['label'], ""))
+        labels["label"] = labels["factor"].map(lambda x: factor_labels.get(x, ""))
         labels["quality"] = labels.get("suggested_program_quality_class", "")
         labels["importance"] = np.nan
         labels["top_cells"] = ""
