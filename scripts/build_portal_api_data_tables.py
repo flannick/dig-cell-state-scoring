@@ -207,7 +207,7 @@ def main() -> None:
                 labels["cell_type"] = cell_type
             label_frames.append(labels)
     factor_labels = {}
-    for p in sorted(args.program_match_dir.glob("*/mouse_msigdb/factors.json")):
+    for p in sorted(args.program_factors.glob("*/mouse_msigdb/factors.json")):
         with open(p, 'r') as f:
             for line in f:
                 dict_line = json.loads(line.strip())
