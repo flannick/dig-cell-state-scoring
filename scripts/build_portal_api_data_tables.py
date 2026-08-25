@@ -211,7 +211,7 @@ def main() -> None:
         with open(p, 'r') as f:
             for line in f:
                 dict_line = json.loads(line.strip())
-                factor_labels[display_factor(dict_line['factor'])] = dict_line['label']
+                factor_labels[(dict_line['cell_type'], display_factor(dict_line['factor']))] = dict_line['label']
     heat = pd.concat(heat_frames, ignore_index=True) if heat_frames else pd.DataFrame()
     if not heat.empty:
         if "state_name" not in heat.columns and "state_id" in heat.columns:
@@ -230,7 +230,7 @@ def main() -> None:
         labels["dataset"] = args.dataset
         labels["model"] = args.model
         labels["factor"] = labels["program_id"].map(display_factor)
-        labels["label"] = labels["factor"].map(lambda x: factor_labels.get(x, ""))
+        labels['label'] = labels.apply(lambda row: factor_labels[row['cell_type'], row['factor']], axis=1)
         labels["quality"] = labels.get("suggested_program_quality_class", "")
         labels["importance"] = np.nan
         labels["top_cells"] = ""
@@ -239,7 +239,7 @@ def main() -> None:
         labels["top_traits"] = ""
         labels["significant_cell_states"] = labels.get("best_curated_state_id", "")
         labels["qc_cell_states"] = labels.get("best_qc_state_id", "")
-    write_table(labels, args.out_dir / "program_factor_metadata.tsv.gz", ["dataset", "cell_type", "model", "factor", "importance", "label", "top_cells", "top_gene_sets", "top_genes", "top_traits", "significant_cell_states", "qc_cell_states"])
+    write_table(labels, args.out_dir / "program_factor_metadata.tsv.gz", ["dataset", "cell_type", "model", "factor", "importance", "label", "quality", "top_cells", "top_gene_sets", "top_genes", "top_traits", "significant_cell_states", "qc_cell_states"])
 
     state_pigean = normalize_pigean(read_table(args.cell_state_pigean), "state_name", args.tissue, args.dataset, args.model, False)
     write_table(state_pigean, args.out_dir / "cell_state_pigean_trait_results.tsv.gz", ["tissue", "cell_type", "state_name", "trait", "beta", "beta_uncorrected"])
