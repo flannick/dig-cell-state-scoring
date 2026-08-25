@@ -208,10 +208,12 @@ def main() -> None:
             label_frames.append(labels)
     factor_labels = {}
     for p in sorted(args.program_factors.glob("*/mouse_msigdb/factors.json")):
+        print(p)
         with open(p, 'r') as f:
             for line in f:
                 dict_line = json.loads(line.strip())
                 factor_labels[(dict_line['cell_type'], display_factor(dict_line['factor']))] = dict_line['label']
+    print(factor_labels)
     heat = pd.concat(heat_frames, ignore_index=True) if heat_frames else pd.DataFrame()
     if not heat.empty:
         if "state_name" not in heat.columns and "state_id" in heat.columns:
