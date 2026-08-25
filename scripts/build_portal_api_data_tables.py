@@ -7,6 +7,7 @@ import argparse
 import gzip
 import re
 from pathlib import Path
+import json
 
 import numpy as np
 import pandas as pd
@@ -154,6 +155,7 @@ def main() -> None:
     ap.add_argument("--program-match-dir", type=Path, default=None)
     ap.add_argument("--cell-state-pigean", type=Path, default=None)
     ap.add_argument("--program-pigean", type=Path, default=None)
+    ap.add_argument("--program-factors", type=Path, default=None)
     ap.add_argument("--default-state-weight-type", default="gradient_percentile_squared")
     args = ap.parse_args()
 
@@ -204,6 +206,12 @@ def main() -> None:
             if not labels.empty:
                 labels["cell_type"] = cell_type
             label_frames.append(labels)
+    factor_labels = {}
+    for p in sorted(args.program_match_dir.glob("*/mouse_msigdb/factors.json")):
+        with open(p, 'r') as f:
+            for line in f:
+                dict_line = json.loads(line.strip())
+                factor_labels[display_factor(dict_line['factor'])] = dict_line
     heat = pd.concat(heat_frames, ignore_index=True) if heat_frames else pd.DataFrame()
     if not heat.empty:
         if "state_name" not in heat.columns and "state_id" in heat.columns:
@@ -222,7 +230,8 @@ def main() -> None:
         labels["dataset"] = args.dataset
         labels["model"] = args.model
         labels["factor"] = labels["program_id"].map(display_factor)
-        labels["label"] = labels.get("suggested_program_label", "")
+        labels["label"] = labels["factor"].map(lambda x: factor_labels.get(x['label'], ""))
+        labels["quality"] = labels.get("suggested_program_quality_class", "")
         labels["importance"] = np.nan
         labels["top_cells"] = ""
         labels["top_gene_sets"] = ""
