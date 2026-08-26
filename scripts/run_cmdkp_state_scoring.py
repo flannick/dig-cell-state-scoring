@@ -161,7 +161,6 @@ def main():
     parser.add_argument('--require-state-manifest', action='store_true')
     parser.add_argument('--qc-gmt', default='')
     parser.add_argument('--allow-small-rank-universe', action='store_true')
-    parser.add_argument('--map-id-col', required=True)
     parser.add_argument('--tissue-col', required=True)
     parser.add_argument('--cell-type-col', required=True)
     parser.add_argument('--donor-col', required=True)
@@ -177,7 +176,7 @@ def main():
     print(f'[state-scoring] loading metadata: {args.cell_metadata}', file=sys.stderr, flush=True)
     metadata = pd.read_csv(args.cell_metadata, sep='\t', compression='infer')
     print(f'[state-scoring] loaded metadata: {len(metadata)} rows', file=sys.stderr, flush=True)
-    required = ['cell_id', args.map_id_col, args.tissue_col, args.cell_type_col, args.donor_col, args.sample_col]
+    required = ['cell_id', args.tissue_col, args.cell_type_col, args.donor_col, args.sample_col]
     missing = [c for c in required if c not in metadata.columns]
     if missing:
         raise SystemExit(f'Metadata is missing required column(s): {", ".join(missing)}')
@@ -205,10 +204,10 @@ def main():
 
     scores = sparse_rank_scores_for_gene_sets(rank_universe, biological_sets + qc_sets, aucell_max_rank, args.progress_every_cells)
 
-    bio = score_activity(metadata, biological_sets, scores, [args.map_id_col, args.tissue_col, args.cell_type_col], [args.map_id_col, args.tissue_col, args.cell_type_col], 'aucell_score', 'biological')
-    qc = score_activity(metadata, qc_sets, scores, [args.map_id_col, args.tissue_col, args.cell_type_col, args.sample_col], [args.map_id_col, args.sample_col], 'ucell_score', 'qc')
-    activity = pd.concat([bio, qc], ignore_index=True).rename(columns={args.tissue_col: 'tissue', args.cell_type_col: 'annotated_cell_type'})
-    activity = activity[['cell_id', 'tissue', 'annotated_cell_type', 'state_type', 'state_name', 'aucell_score', 'ucell_score', 'state_activity_weight_gradient', 'state_activity_weight_hightail']]
+    bio = score_activity(metadata, biological_sets, scores, [args.tissue_col, args.cell_type_col], [args.tissue_col, args.cell_type_col], 'aucell_score', 'biological')
+    qc = score_activity(metadata, qc_sets, scores, [args.tissue_col, args.cell_type_col, args.sample_col], [args.tissue_col, args.sample_col], 'ucell_score', 'qc')
+    activity = pd.concat([bio, qc], ignore_index=True).rename(columns={args.tissue_col: 'tissue', args.cell_type_col: 'cell_type'})
+    activity = activity[['cell_id', 'tissue', 'cell_type', 'state_type', 'state_name', 'aucell_score', 'ucell_score', 'state_activity_weight_gradient', 'state_activity_weight_hightail']]
     activity.to_csv(f'{args.out_dir}/cell_state_activity.tsv.gz', sep='\t', index=False, compression='gzip')
 
     with open(f'{args.out_dir}/run_summary.json', 'w') as f:

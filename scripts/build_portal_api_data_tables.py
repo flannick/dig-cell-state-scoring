@@ -48,8 +48,6 @@ def display_factor(value: str) -> str:
 
 def ensure_expression_fields(frame: pd.DataFrame) -> pd.DataFrame:
     out = frame.copy()
-    if "annotated_cell_type" in out.columns and "cell_type" not in out.columns:
-        out["cell_type"] = out["annotated_cell_type"]
     if "weighted_mean_cp10k" in out.columns:
         value = pd.to_numeric(out["weighted_mean_cp10k"], errors="coerce")
     elif "weighted_mean_expression" in out.columns:
